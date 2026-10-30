@@ -290,7 +290,7 @@ class DiscordClient {
       const response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/claim`, {
         platform: platform
       }, {
-        headers: this.getHeaders(userToken),
+        headers: this.getCleanBrowserHeaders(userToken),
         timeout: 10000
       });
 
@@ -315,7 +315,7 @@ class DiscordClient {
       const response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/heartbeat`, {
         stream_key: streamKey
       }, {
-        headers: this.getHeaders(userToken),
+        headers: this.getCleanBrowserHeaders(userToken),
         timeout: 10000
       });
 

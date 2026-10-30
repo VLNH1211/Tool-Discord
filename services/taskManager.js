@@ -57,6 +57,7 @@ class TaskManager {
 
     this.questTask = {
       status: 'idle', // 'idle' | 'running' | 'stopped' | 'completed'
+      mode: 'single', // 'single' | 'all'
       questId: null,
       questName: null,
       gameId: null,
@@ -66,8 +67,12 @@ class TaskManager {
       elapsedSeconds: 0,
       sessionId: null,
       sequence: 0,
-      timer: null
+      timer: null,
+      queueIndex: 0,
+      queueTotal: 0,
+      shouldStop: false
     };
+    this._questResolve = null;
 
     this.purgeTask = {
       status: 'idle', // 'idle' | 'running' | 'stopped' | 'completed'
@@ -682,79 +687,288 @@ class TaskManager {
   // --- DISCORD QUESTS AUTOMATION ---
 
   getQuestStatus() {
+    const target = this.questTask.targetSeconds || 900;
+    const elapsed = this.questTask.elapsedSeconds || 0;
+    const percentage = target > 0 ? Math.min(100, Math.round((elapsed / target) * 100)) : 0;
     return {
       status: this.questTask.status,
+      mode: this.questTask.mode || 'single',
       questId: this.questTask.questId,
       questName: this.questTask.questName,
       gameName: this.questTask.gameName,
-      targetSeconds: this.questTask.targetSeconds,
-      elapsedSeconds: this.questTask.elapsedSeconds
+      targetSeconds: target,
+      elapsedSeconds: elapsed,
+      percentage,
+      queueIndex: this.questTask.queueIndex || 0,
+      queueTotal: this.questTask.queueTotal || 0
     };
   }
 
-  async startQuestFarm({ questId, questName, applicationId, gameName, targetSeconds = 900, intervalSec = 30 }) {
-    if (!this.user.token || !this.user.analyticsToken) {
-      throw new Error('Chưa đăng nhập Discord Token hoặc thiếu Analytics Token!');
+  async startAutoFarmAllQuests(userToken) {
+    if (userToken) this.user.token = userToken;
+    if (!this.user.token) {
+      throw new Error('Chưa đăng nhập Discord Token!');
+    }
+
+    if (!this.user.analyticsToken) {
+      const uRes = await discordClient.getCurrentUser(this.user.token);
+      if (uRes.success && uRes.data?.analytics_token) {
+        this.user.analyticsToken = uRes.data.analytics_token;
+      }
     }
 
     if (this.questTask.status === 'running') {
       throw new Error('Đang có nhiệm vụ Quest khác đang chạy!');
     }
 
-    // Auto enroll in quest first if needed
-    this.addLog(`🎯 Chuẩn bị tự động cày Quest "${questName || questId}"...`, 'QUEST');
-    const enrollRes = await discordClient.enrollQuest(this.user.token, questId);
-    if (enrollRes.success) {
-      this.addLog(`✅ Đã ghi danh (Enrolled) vào Quest thành công!`, 'SUCCESS');
-    }
-
-    // Match or find detectable executable
-    let executable = 'game.exe';
-    const matched = detectables.getGameById(applicationId);
-    if (matched && matched.executable) {
-      executable = matched.executable;
-    }
-
-    const sessionId = uuidv4();
     this.questTask.status = 'running';
-    this.questTask.questId = questId;
-    this.questTask.questName = questName || 'Discord Quest';
-    this.questTask.gameId = String(applicationId);
-    this.questTask.gameName = gameName || matched?.name || 'Quest Game';
-    this.questTask.executable = executable;
-    this.questTask.targetSeconds = targetSeconds;
+    this.questTask.mode = 'all';
+    this.questTask.shouldStop = false;
     this.questTask.elapsedSeconds = 0;
-    this.questTask.sessionId = sessionId;
-    this.questTask.sequence = 1;
+    this.questTask.targetSeconds = 0;
+    this.questTask.queueIndex = 0;
+    this.questTask.queueTotal = 0;
+    this.broadcastSSE('quest_status', this.getQuestStatus());
 
-    this.addLog(
-      `🚀 Bắt đầu cày Quest: "${this.questTask.questName}" (Mục tiêu: ${targetSeconds}s / ${Math.round(targetSeconds / 60)} phút)`,
-      'QUEST'
-    );
+    this.addLog(`🔍 Đang quét danh sách Discord Quests để tự động cày tất cả...`, 'QUEST');
+    const questRes = await discordClient.getQuests(this.user.token);
+    if (!questRes.success) {
+      this.questTask.status = 'idle';
+      this.broadcastSSE('quest_status', this.getQuestStatus());
+      throw new Error(`Không thể lấy danh sách Quests: ${questRes.message}`);
+    }
+
+    const allQuests = questRes.quests || [];
+
+    // Auto-claim any completed but unclaimed quests right away
+    for (const q of allQuests) {
+      if (q.user_status?.completed_at && !q.user_status?.claimed_at) {
+        const qTitle = q.config?.messages?.quest_name || q.config?.messages?.game_title || q.id;
+        this.addLog(`🎁 Phát hiện nhiệm vụ đã xong chưa nhận thưởng: "${qTitle}". Đang tự động nhận...`, 'QUEST');
+        const claimRes = await discordClient.claimQuest(this.user.token, q.id);
+        if (claimRes.success) {
+          this.addLog(`🏆 Đã nhận thưởng thành công cho "${qTitle}"!`, 'SUCCESS');
+        }
+      }
+    }
+
+    const pendingQuests = allQuests.filter(q => !q.user_status?.completed_at);
+    if (pendingQuests.length === 0) {
+      this.questTask.status = 'completed';
+      this.addLog(`🎉 Tuyệt vời! Bạn không còn nhiệm vụ Discord Quests nào chưa cày. Tất cả đã hoàn thành!`, 'SUCCESS');
+      this.broadcastSSE('quest_status', this.getQuestStatus());
+      return { success: true, message: 'Tất cả nhiệm vụ đã hoàn thành!', total: 0 };
+    }
+
+    this.questTask.queueTotal = pendingQuests.length;
+    this.questTask.queueIndex = 0;
+    this.addLog(`🚀 Bắt đầu cày tự động tuần tự ${pendingQuests.length} nhiệm vụ Discord Quests!`, 'QUEST');
+
+    // Run queue in background
+    this._processQuestQueue(pendingQuests);
+
+    return { success: true, total: pendingQuests.length };
+  }
+
+  async _processQuestQueue(pendingQuests) {
+    for (let i = 0; i < pendingQuests.length; i++) {
+      if (this.questTask.shouldStop) {
+        break;
+      }
+
+      const q = pendingQuests[i];
+      this.questTask.queueIndex = i + 1;
+
+      const questName = q.config?.messages?.quest_name || q.config?.messages?.game_title || 'Discord Quest';
+      const gameTitle = q.config?.messages?.game_title || q.config?.application?.name || 'Game';
+      const appId = q.config?.application?.id || '';
+      const taskObj = q.config?.task_config_v2?.tasks?.PLAY_ON_DESKTOP || 
+                      q.config?.task_config?.tasks?.PLAY_ON_DESKTOP || 
+                      Object.values(q.config?.task_config_v2?.tasks || q.config?.task_config?.tasks || {})[0];
+      const targetSeconds = taskObj?.target || 900;
+      const targetMins = Math.round(targetSeconds / 60);
+
+      this.addLog(
+        `🎯 [Hàng đợi ${i + 1}/${pendingQuests.length}] Bắt đầu nhiệm vụ: "${questName}" (${gameTitle}) - Mục tiêu: ${targetMins} phút`,
+        'QUEST'
+      );
+
+      const success = await this._runSingleQuestFarm({
+        questId: q.id,
+        questName,
+        applicationId: appId,
+        gameName: gameTitle,
+        targetSeconds,
+        intervalSec: 15
+      });
+
+      if (!success || this.questTask.shouldStop) {
+        break;
+      }
+
+      if (i < pendingQuests.length - 1 && !this.questTask.shouldStop) {
+        this.addLog(`⏳ Đang chuyển sang nhiệm vụ tiếp theo (${i + 2}/${pendingQuests.length})...`, 'INFO');
+        await new Promise(r => setTimeout(r, 4000));
+      }
+    }
+
+    if (this.questTask.shouldStop) {
+      this.questTask.status = 'stopped';
+      this.addLog(`⏹ Đã dừng hàng đợi cày Quests theo yêu cầu người dùng.`, 'WARN');
+    } else {
+      this.questTask.status = 'completed';
+      this.addLog(`🏆🎉 TẤT CẢ ${pendingQuests.length} NHIỆM VỤ DISCORD QUESTS ĐÃ ĐƯỢC CÀY XONG VÀ NHẬN THƯỞNG!`, 'SUCCESS');
+    }
 
     if (this.settings.enableGatewayPresence) {
-      gateway.updatePresence(this.questTask.gameName, this.questTask.gameId);
+      gateway.clearPresence();
+    }
+    this.broadcastSSE('quest_status', this.getQuestStatus());
+  }
+
+  async startQuestFarm({ questId, questName, applicationId, gameName, targetSeconds = 900, intervalSec = 15, userToken }) {
+    if (userToken) this.user.token = userToken;
+    if (!this.user.token) {
+      throw new Error('Chưa đăng nhập Discord Token!');
     }
 
-    // Send initial quest heartbeat
-    await this._sendQuestHeartbeat(true, intervalSec);
-
-    this.questTask.timer = setInterval(async () => {
-      this.questTask.elapsedSeconds += intervalSec;
-
-      if (this.questTask.elapsedSeconds >= this.questTask.targetSeconds) {
-        await this._completeQuest();
-      } else {
-        await this._sendQuestHeartbeat(false, intervalSec);
-        this.broadcastSSE('quest_status', this.getQuestStatus());
+    if (!this.user.analyticsToken) {
+      const uRes = await discordClient.getCurrentUser(this.user.token);
+      if (uRes.success && uRes.data?.analytics_token) {
+        this.user.analyticsToken = uRes.data.analytics_token;
       }
-    }, intervalSec * 1000);
+    }
 
-    this.broadcastSSE('quest_status', this.getQuestStatus());
+    if (this.questTask.status === 'running') {
+      throw new Error('Đang có nhiệm vụ Quest khác đang chạy!');
+    }
+
+    this.questTask.status = 'running';
+    this.questTask.mode = 'single';
+    this.questTask.shouldStop = false;
+    this.questTask.queueIndex = 1;
+    this.questTask.queueTotal = 1;
+
+    // Run in background
+    (async () => {
+      await this._runSingleQuestFarm({
+        questId,
+        questName,
+        applicationId,
+        gameName,
+        targetSeconds,
+        intervalSec
+      });
+
+      if (this.questTask.shouldStop) {
+        this.questTask.status = 'stopped';
+      } else {
+        this.questTask.status = 'completed';
+      }
+
+      if (this.settings.enableGatewayPresence) {
+        gateway.clearPresence();
+      }
+      this.broadcastSSE('quest_status', this.getQuestStatus());
+    })();
+
     return { success: true };
   }
 
-  async _sendQuestHeartbeat(isInitial = false, intervalSec = 30) {
+  async _runSingleQuestFarm({ questId, questName, applicationId, gameName, targetSeconds = 900, intervalSec = 15 }) {
+    return new Promise(async (resolve) => {
+      // Auto enroll in quest first if needed
+      this.addLog(`🎯 Ghi danh (Enroll) vào Quest "${questName || questId}"...`, 'QUEST');
+      try {
+        await discordClient.enrollQuest(this.user.token, questId);
+      } catch (e) {
+        // Continue even if already enrolled
+      }
+
+      let executable = 'game.exe';
+      const matched = detectables.getGameById(applicationId);
+      if (matched && matched.executable) {
+        executable = matched.executable;
+      }
+
+      const sessionId = uuidv4();
+      this.questTask.status = 'running';
+      this.questTask.questId = questId;
+      this.questTask.questName = questName || 'Discord Quest';
+      this.questTask.gameId = String(applicationId);
+      this.questTask.gameName = gameName || matched?.name || 'Quest Game';
+      this.questTask.executable = executable;
+      this.questTask.targetSeconds = targetSeconds;
+      this.questTask.elapsedSeconds = 0;
+      this.questTask.sessionId = sessionId;
+      this.questTask.sequence = 1;
+
+      this.addLog(
+        `🚀 Đang cày: "${this.questTask.questName}" (Mục tiêu: ${targetSeconds}s / ${Math.round(targetSeconds / 60)} phút)`,
+        'QUEST'
+      );
+
+      if (this.settings.enableGatewayPresence) {
+        gateway.updatePresence(this.questTask.gameName, this.questTask.gameId);
+      }
+
+      const stepSec = Math.min(intervalSec, targetSeconds);
+      await this._sendQuestHeartbeat(true, stepSec);
+      this.broadcastSSE('quest_status', this.getQuestStatus());
+
+      this._questResolve = resolve;
+
+      this.questTask.timer = setInterval(async () => {
+        if (this.questTask.shouldStop) {
+          this._finishSingleQuest(false);
+          return;
+        }
+
+        this.questTask.elapsedSeconds += stepSec;
+        this.broadcastSSE('quest_status', this.getQuestStatus());
+
+        if (this.questTask.elapsedSeconds >= this.questTask.targetSeconds) {
+          this._finishSingleQuest(true);
+        } else {
+          await this._sendQuestHeartbeat(false, stepSec);
+        }
+      }, stepSec * 1000);
+    });
+  }
+
+  async _finishSingleQuest(success = true) {
+    if (this.questTask.timer) {
+      clearInterval(this.questTask.timer);
+      this.questTask.timer = null;
+    }
+
+    if (success) {
+      this.questTask.elapsedSeconds = this.questTask.targetSeconds;
+      this.broadcastSSE('quest_status', this.getQuestStatus());
+      this.addLog(`🎉 Đã đạt mục tiêu thời gian cho Quest: "${this.questTask.questName}"!`, 'SUCCESS');
+
+      // Auto-claim reward
+      this.addLog(`🎁 Đang tự động nhận phần thưởng (Claim Reward)...`, 'QUEST');
+      try {
+        const claimRes = await discordClient.claimQuest(this.user.token, this.questTask.questId);
+        if (claimRes.success) {
+          this.addLog(`🏆 Nhận thưởng thành công cho "${this.questTask.questName}"! Đã nạp vào kho đồ Discord.`, 'SUCCESS');
+        } else {
+          this.addLog(`ℹ️ Kết quả nhận thưởng: ${claimRes.message || 'Kiểm tra hòm đồ / Discord Quests.'}`, 'INFO');
+        }
+      } catch (err) {
+        this.addLog(`⚠️ Lỗi claim quest: ${err.message}`, 'WARN');
+      }
+    }
+
+    if (this._questResolve) {
+      const res = this._questResolve;
+      this._questResolve = null;
+      res(success);
+    }
+  }
+
+  async _sendQuestHeartbeat(isInitial = false, intervalSec = 15) {
     try {
       const durationMs = intervalSec * 1000;
       const gameObj = {
@@ -764,23 +978,27 @@ class TaskManager {
       };
 
       // 1. Send Science heartbeat with quest game ID
-      const scienceEvents = discordClient.createPlaytimeHeartbeatEvent(
-        gameObj,
-        this.questTask.sessionId,
-        this.questTask.sequence,
-        isInitial,
-        durationMs
-      );
-      await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, scienceEvents);
+      if (this.user.token && this.user.analyticsToken) {
+        const scienceEvents = discordClient.createPlaytimeHeartbeatEvent(
+          gameObj,
+          this.questTask.sessionId,
+          this.questTask.sequence,
+          isInitial,
+          durationMs
+        );
+        await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, scienceEvents);
+      }
 
       // 2. Also send Discord Quest API heartbeat
-      await discordClient.sendQuestHeartbeat(this.user.token, this.questTask.questId);
+      if (this.user.token && this.questTask.questId) {
+        await discordClient.sendQuestHeartbeat(this.user.token, this.questTask.questId);
+      }
 
       this.questTask.sequence++;
       const currentMin = Math.floor(this.questTask.elapsedSeconds / 60);
       const totalMin = Math.ceil(this.questTask.targetSeconds / 60);
       this.addLog(
-        `🎯 [Quest Progress] Đã cày: ${this.questTask.elapsedSeconds}s / ${this.questTask.targetSeconds}s (~${currentMin}/${totalMin} phút)`,
+        `🎯 [Quest Progress] Đã cày: ${this.questTask.elapsedSeconds}s / ${this.questTask.targetSeconds}s (~${currentMin}/${totalMin} phút) - "${this.questTask.questName}"`,
         'QUEST'
       );
     } catch (err) {
@@ -788,43 +1006,23 @@ class TaskManager {
     }
   }
 
-  async _completeQuest() {
-    if (this.questTask.timer) {
-      clearInterval(this.questTask.timer);
-      this.questTask.timer = null;
-    }
-
-    this.questTask.status = 'completed';
-    this.addLog(`🎉 Đã đạt mục tiêu thời gian cho Quest: "${this.questTask.questName}"!`, 'SUCCESS');
-
-    // Auto-claim reward
-    this.addLog(`🎁 Đang tự động nhận phần thưởng (Claim Reward)...`, 'QUEST');
-    const claimRes = await discordClient.claimQuest(this.user.token, this.questTask.questId);
-    if (claimRes.success) {
-      this.addLog(`🏆 Nhận thưởng thành công! Kiểm tra hòm đồ / Discord Gift Inventory của bạn.`, 'SUCCESS');
-    } else {
-      this.addLog(`ℹ️ Kết quả nhận thưởng: ${claimRes.message || 'Có thể nhận trực tiếp trong app Discord.'}`, 'INFO');
-    }
-
-    if (this.settings.enableGatewayPresence) {
-      gateway.clearPresence();
-    }
-
-    this.broadcastSSE('quest_status', this.getQuestStatus());
-  }
-
   stopQuestFarm() {
-    if (this.questTask.status !== 'running') return;
+    this.questTask.shouldStop = true;
     if (this.questTask.timer) {
       clearInterval(this.questTask.timer);
       this.questTask.timer = null;
+    }
+    if (this._questResolve) {
+      const res = this._questResolve;
+      this._questResolve = null;
+      res(false);
     }
     this.questTask.status = 'stopped';
-    this.addLog(`⏹ Đã dừng tiến trình cày Quest.`, 'WARN');
-    this.broadcastSSE('quest_status', this.getQuestStatus());
+    this.addLog(`⏹ Đã dừng toàn bộ tiến trình cày Discord Quests.`, 'WARN');
     if (this.settings.enableGatewayPresence) {
       gateway.clearPresence();
     }
+    this.broadcastSSE('quest_status', this.getQuestStatus());
   }
 
   // ==========================================

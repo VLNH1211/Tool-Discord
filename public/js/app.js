@@ -1563,7 +1563,10 @@ class App {
           btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang chạy...</span>`;
           const res = await fetch('/api/quests/start-farm', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': this.token || ''
+            },
             body: JSON.stringify({
               questId: btn.dataset.id,
               questName: btn.dataset.name,
@@ -1587,7 +1590,10 @@ class App {
           this.showToast('🎁 Đang nhận phần thưởng Quest...', 'info');
           const res = await fetch('/api/quests/claim', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': this.token || ''
+            },
             body: JSON.stringify({ questId: btn.dataset.id })
           });
           const result = await res.json();
@@ -1604,7 +1610,154 @@ class App {
     }
   }
 
-  updateQuestRunningUI(status) {}
+  updateQuestRunningUI(status) {
+    if (!status) return;
+
+    const btnAuto = document.getElementById('btnAutoFarmAllQuests');
+    const btnStop = document.getElementById('btnStopQuestFarm');
+    const banner = document.getElementById('questQueueBanner');
+    const titleEl = document.getElementById('questQueueCurrentTitle');
+    const countBadge = document.getElementById('questQueueCountBadge');
+    const timeProgress = document.getElementById('questQueueTimeProgress');
+    const progressBar = document.getElementById('questQueueProgressBar');
+
+    const isRunning = status.status === 'running';
+
+    if (btnAuto) {
+      if (isRunning) {
+        btnAuto.disabled = true;
+        btnAuto.classList.add('opacity-50', 'cursor-not-allowed');
+        btnAuto.innerHTML = `
+          <span class="inline-block animate-spin mr-1.5">↻</span>
+          <span>Đang Cày Tự Động...</span>
+        `;
+      } else {
+        btnAuto.disabled = false;
+        btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnAuto.innerHTML = `<span>⚡ Cày Tự Động Tất Cả Quests</span>`;
+      }
+    }
+
+    if (btnStop) {
+      btnStop.disabled = !isRunning;
+      if (isRunning) {
+        btnStop.classList.remove('disabled:opacity-40', 'disabled:cursor-not-allowed');
+      } else {
+        btnStop.classList.add('disabled:opacity-40', 'disabled:cursor-not-allowed');
+      }
+    }
+
+    if (banner) {
+      if (isRunning) {
+        banner.classList.remove('hidden');
+        if (titleEl) {
+          titleEl.textContent = status.questName ? `Đang cày: ${status.questName}` : 'Đang cày nhiệm vụ...';
+        }
+        if (countBadge) {
+          if (status.mode === 'all' && status.queueTotal > 0) {
+            countBadge.classList.remove('hidden');
+            countBadge.textContent = `Nhiệm vụ ${status.queueIndex || 1} / ${status.queueTotal}`;
+          } else {
+            countBadge.classList.add('hidden');
+          }
+        }
+        if (timeProgress) {
+          const currentM = Math.floor((status.elapsedSeconds || 0) / 60);
+          const totalM = Math.ceil((status.targetSeconds || 900) / 60);
+          timeProgress.textContent = `Tiến độ: ${status.elapsedSeconds || 0}s / ${status.targetSeconds || 900}s (~${currentM}/${totalM} phút) - Game: ${status.gameName || 'Discord'}`;
+        }
+        if (progressBar) {
+          progressBar.style.width = `${status.percentage || 0}%`;
+        }
+      } else if (status.status === 'completed') {
+        banner.classList.remove('hidden');
+        if (titleEl) titleEl.textContent = '🎉 Đã hoàn thành nhiệm vụ & tự động nhận thưởng!';
+        if (countBadge && status.queueTotal > 0) {
+          countBadge.textContent = `${status.queueTotal} / ${status.queueTotal} Quests`;
+        }
+        if (timeProgress) timeProgress.textContent = 'Toàn bộ phần thưởng đã được nhận thành công!';
+        if (progressBar) progressBar.style.width = '100%';
+        setTimeout(() => this.loadQuests(), 3000);
+      } else if (status.status === 'stopped') {
+        if (titleEl) titleEl.textContent = '⏹ Đã dừng tiến trình cày Quests';
+        if (timeProgress) timeProgress.textContent = 'Bấm "⚡ Cày Tự Động Tất Cả Quests" để tiếp tục.';
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    // Update individual buttons in grid
+    const grid = document.getElementById('questsGrid');
+    if (grid) {
+      grid.querySelectorAll('.btn-farm-quest').forEach(btn => {
+        if (isRunning) {
+          if (btn.dataset.id === status.questId) {
+            btn.disabled = true;
+            btn.className = 'btn-farm-quest w-full bg-amber-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-wait flex items-center justify-center space-x-1.5';
+            btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang cày (${status.percentage || 0}%)</span>`;
+          } else {
+            btn.disabled = true;
+            btn.classList.add('opacity-40', 'cursor-not-allowed');
+          }
+        } else {
+          btn.disabled = false;
+          btn.classList.remove('opacity-40', 'cursor-not-allowed');
+          const targetMins = Math.round((parseInt(btn.dataset.target) || 900) / 60);
+          btn.className = 'btn-farm-quest w-full bg-amber-500 hover:bg-amber-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5';
+          btn.innerHTML = `<span>⚡ Tự Động Cày (${targetMins} phút)</span>`;
+        }
+      });
+    }
+  }
+
+  async startAutoFarmAllQuests() {
+    if (!this.token) {
+      this.openTokenModal();
+      return;
+    }
+
+    if (!confirm('Bạn có muốn tự động cày tuần tự TẤT CẢ các nhiệm vụ Discord Quests và tự động nhận toàn bộ phần thưởng không?')) {
+      return;
+    }
+
+    this.showToast('🚀 Bắt đầu quét & cày tự động tất cả Discord Quests...', 'info');
+    try {
+      const res = await fetch('/api/quests/start-farm-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': this.token
+        }
+      });
+      const data = await res.json();
+      if (!data.success) {
+        this.showToast(data.message || 'Lỗi bắt đầu cày Quests', 'error');
+      } else {
+        this.showToast(data.message || `Đang chạy hàng đợi ${data.total || ''} nhiệm vụ!`, 'success');
+      }
+    } catch (e) {
+      this.showToast(`Lỗi: ${e.message}`, 'error');
+    }
+  }
+
+  async stopQuestFarm() {
+    this.showToast('⏹ Đang dừng tiến trình cày Quests...', 'warn');
+    try {
+      const res = await fetch('/api/quests/stop-farm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': this.token || ''
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        this.showToast('Đã dừng tiến trình cày Quests!', 'info');
+      }
+    } catch (e) {
+      this.showToast(`Lỗi: ${e.message}`, 'error');
+    }
+  }
 
   // --- TERMINAL & LOGS ---
   appendLog(log, live = true) {
@@ -1799,8 +1952,10 @@ class App {
     document.getElementById('btnStartStream')?.addEventListener('click', () => this.startStream());
     document.getElementById('btnStopStream')?.addEventListener('click', () => this.stopStream());
 
-    // Quests Refresh
-    document.getElementById('btnRefreshQuests').addEventListener('click', () => this.loadQuests());
+    // Quests Controls
+    document.getElementById('btnRefreshQuests')?.addEventListener('click', () => this.loadQuests());
+    document.getElementById('btnAutoFarmAllQuests')?.addEventListener('click', () => this.startAutoFarmAllQuests());
+    document.getElementById('btnStopQuestFarm')?.addEventListener('click', () => this.stopQuestFarm());
 
     // Presence Studio Controls
     document.getElementById('btnSetSpotify').addEventListener('click', () => this.setSpotifyPresence());

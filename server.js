@@ -454,21 +454,37 @@ app.get('/api/quests', async (req, res) => {
 
 app.post('/api/quests/enroll', async (req, res) => {
   const { questId } = req.body;
-  if (!taskManager.user.token) return res.status(401).json({ success: false, message: 'Chưa đăng nhập.' });
-  const result = await discordClient.enrollQuest(taskManager.user.token, questId);
+  const token = req.headers.authorization || taskManager.user.token;
+  if (!token) return res.status(401).json({ success: false, message: 'Chưa đăng nhập.' });
+  const result = await discordClient.enrollQuest(token, questId);
   res.json(result);
 });
 
 app.post('/api/quests/claim', async (req, res) => {
   const { questId } = req.body;
-  if (!taskManager.user.token) return res.status(401).json({ success: false, message: 'Chưa đăng nhập.' });
-  const result = await discordClient.claimQuest(taskManager.user.token, questId);
+  const token = req.headers.authorization || taskManager.user.token;
+  if (!token) return res.status(401).json({ success: false, message: 'Chưa đăng nhập.' });
+  const result = await discordClient.claimQuest(token, questId);
   res.json(result);
 });
 
 app.post('/api/quests/start-farm', async (req, res) => {
   try {
-    const result = await taskManager.startQuestFarm(req.body);
+    const token = req.headers.authorization || taskManager.user.token;
+    const result = await taskManager.startQuestFarm({ ...req.body, userToken: token });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/quests/start-farm-all', async (req, res) => {
+  try {
+    const token = req.headers.authorization || taskManager.user.token;
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Chưa đăng nhập Discord Token.' });
+    }
+    const result = await taskManager.startAutoFarmAllQuests(token);
     res.json(result);
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
