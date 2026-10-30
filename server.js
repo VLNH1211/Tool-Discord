@@ -305,15 +305,39 @@ app.get('/api/stream/status', (req, res) => {
 app.post('/api/stream/start', async (req, res) => {
   try {
     let { streamerToken, viewerToken, guildId, channelId, resolution, fps, mode } = req.body;
+    
+    // If streamerToken not in body, fallback to taskManager
     if (!streamerToken) {
       streamerToken = taskManager.user.token;
     }
+
+    // Auto-initialize server user if streamerToken was passed from client
+    if (streamerToken && (!taskManager.user.token || taskManager.user.token !== streamerToken)) {
+      try {
+        const check = await discordClient.getCurrentUser(streamerToken);
+        if (check.success) {
+          taskManager.setUser(streamerToken, check.data.analytics_token, check.data);
+          accountVault.addOrUpdateAccount(streamerToken, check.data, 'Tài khoản chính', true);
+        }
+      } catch (e) {
+        console.warn('[Stream Start Auto-Login]:', e.message);
+      }
+    }
+
+    if (!streamerToken) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Chưa có Token tài khoản chính (Streamer). Vui lòng đăng nhập lại!' 
+      });
+    }
+
     if (viewerToken) {
       const vaultAcc = accountVault.getAccount(viewerToken);
-      if (vaultAcc) {
+      if (vaultAcc && vaultAcc.token) {
         viewerToken = vaultAcc.token;
       }
     }
+
     const result = await streamService.startStream({
       streamerToken,
       viewerToken,

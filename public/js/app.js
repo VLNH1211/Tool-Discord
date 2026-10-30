@@ -183,6 +183,11 @@ class App {
           alertBox.textContent = `✅ Xác thực thành công: @${data.profile.username}!`;
         }
 
+        this.setStoredToken(cleanToken, cleanToken);
+        this.setStoredToken(data.profile.id, cleanToken);
+        this.setStoredToken(data.profile.username, cleanToken);
+        if (data.account?.id) this.setStoredToken(data.account.id, cleanToken);
+
         setTimeout(() => {
           this.closeTokenModal();
           this.loadQuests();
@@ -294,6 +299,23 @@ class App {
     }
   }
 
+  getStoredTokens() {
+    try {
+      return JSON.parse(localStorage.getItem('discord_tokens_vault') || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+  setStoredToken(identifier, token) {
+    if (!identifier || !token) return;
+    try {
+      const tokens = this.getStoredTokens();
+      tokens[String(identifier)] = String(token).trim();
+      localStorage.setItem('discord_tokens_vault', JSON.stringify(tokens));
+    } catch (e) {}
+  }
+
   async syncAccountsWithServer() {
     try {
       // 1. Fetch current server accounts
@@ -308,16 +330,24 @@ class App {
         if (stored) localAccounts = JSON.parse(stored);
       } catch (e) {}
 
+      // Attach client-stored tokens to local accounts before syncing
+      const tokens = this.getStoredTokens();
+      localAccounts.forEach(la => {
+        if (!la.token) {
+          la.token = tokens[la.id] || tokens[la.userId] || tokens[la.username] || (la.isActive ? this.token : null);
+        }
+      });
+
       // If localStorage has accounts not on server, sync them to server
       if (localAccounts.length > 0) {
         const missingOnServer = localAccounts.filter(la => 
-          !serverAccounts.some(sa => sa.userId === la.userId || (la.token && sa.token === la.token))
+          !serverAccounts.some(sa => sa.userId === la.userId)
         );
         if (missingOnServer.length > 0) {
           const syncRes = await fetch('/api/accounts/sync-all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accounts: localAccounts })
+            body: JSON.stringify({ accounts: missingOnServer })
           });
           const syncData = await syncRes.json();
           if (syncData.success && syncData.accounts) {
@@ -1138,9 +1168,27 @@ class App {
       return;
     }
 
+    const streamerToken = this.token || localStorage.getItem('discord_user_token');
+    if (!streamerToken) {
+      this.showToast('Chưa có User Token tài khoản chính. Vui lòng đăng nhập trước!', 'error');
+      this.openTokenModal();
+      return;
+    }
+
     const viewerSelect = document.getElementById('streamViewerAccountSelect')?.value;
     const viewerCustom = document.getElementById('streamViewerTokenCustom')?.value.trim();
-    const viewerToken = viewerCustom || viewerSelect || null;
+    
+    // Resolve viewer token from client tokens vault or direct token
+    const tokens = this.getStoredTokens();
+    let viewerToken = viewerCustom || null;
+    if (!viewerToken && viewerSelect) {
+      const selectedAcc = (this.accounts || []).find(a => a.id === viewerSelect || a.userId === viewerSelect);
+      viewerToken = selectedAcc?.token 
+        || (selectedAcc ? tokens[selectedAcc.id] || tokens[selectedAcc.userId] || tokens[selectedAcc.username] : null) 
+        || tokens[viewerSelect] 
+        || (viewerSelect.includes('.') ? viewerSelect : null);
+    }
+
     const resolution = document.getElementById('streamResolution')?.value || '720p';
     const mode = document.getElementById('streamConnectionMode')?.value || 'cloud';
 
@@ -1155,8 +1203,9 @@ class App {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          channelId,
+          streamerToken,
           viewerToken,
+          channelId,
           resolution,
           fps: 15,
           mode
