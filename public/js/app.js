@@ -1,0 +1,1301 @@
+// Discord Mission Control Suite v3.0 - Frontend Application Logic
+
+class App {
+  constructor() {
+    this.user = null;
+    this.token = localStorage.getItem('discord_user_token') || null;
+    this.accounts = [];
+    this.autoScroll = true;
+    this.activeLogFilter = 'ALL';
+    this.diversityTarget = 100;
+    this.selectedPlaytimeGame = {
+      id: '730',
+      name: 'Counter-Strike 2',
+      executable: 'cs2.exe'
+    };
+    this.friendsList = [];
+    this.currentFriendFilter = '1'; // 1: Friends, 4: Outgoing, 3: Incoming, 2: Blocked
+    this.serversList = [];
+    this.logs = [];
+    this.eventSource = null;
+    this.searchTimeout = null;
+
+    this.init();
+  }
+
+  async init() {
+    this.setupEventListeners();
+    this.initSSE();
+    this.loadPresets();
+
+    if (this.token) {
+      await this.login(this.token, false);
+    } else {
+      this.fetchInitialStatus();
+    }
+  }
+
+  // --- SSE CONNECTION ---
+  initSSE() {
+    if (this.eventSource) {
+      this.eventSource.close();
+    }
+
+    const badge = document.getElementById('sseStatusBadge');
+    const badgeText = document.getElementById('sseStatusText');
+
+    this.eventSource = new EventSource('/api/events');
+
+    this.eventSource.onopen = () => {
+      badge.className = 'hidden sm:flex items-center space-x-2 text-xs bg-[#1e1f22] px-3 py-1.5 rounded-full border border-[#3f4147]';
+      badgeText.className = 'text-emerald-400 font-mono';
+      badgeText.textContent = 'Đã kết nối SSE';
+    };
+
+    this.eventSource.onerror = () => {
+      badgeText.className = 'text-rose-400 font-mono';
+      badgeText.textContent = 'Mất kết nối - Đang kết nối lại...';
+    };
+
+    this.eventSource.addEventListener('init', (e) => {
+      const data = JSON.parse(e.data);
+      if (data.user) this.renderUserProfile(data.user);
+      if (data.diversity) this.updateDiversityUI(data.diversity);
+      if (data.playtime) this.updatePlaytimeUI(data.playtime);
+      if (data.quest) this.updateQuestRunningUI(data.quest);
+      if (data.purge) this.updatePurgeUI(data.purge);
+      if (data.stream) this.updateStreamUI(data.stream);
+      if (data.autoResponder) this.updateAutoResponderUI(data.autoResponder);
+      if (data.accounts) {
+        this.accounts = data.accounts;
+        this.renderAccountsVault();
+      }
+      if (data.logs) {
+        data.logs.forEach(log => this.appendLog(log, false));
+        this.scrollToBottom();
+      }
+    });
+
+    this.eventSource.addEventListener('log', (e) => {
+      const log = JSON.parse(e.data);
+      this.appendLog(log, true);
+    });
+
+    this.eventSource.addEventListener('logs_cleared', () => {
+      document.getElementById('terminalOutput').innerHTML = '';
+      this.logs = [];
+      this.updateLogCount();
+    });
+
+    this.eventSource.addEventListener('diversity_status', (e) => {
+      this.updateDiversityUI(JSON.parse(e.data));
+    });
+
+    this.eventSource.addEventListener('playtime_status', (e) => {
+      this.updatePlaytimeUI(JSON.parse(e.data));
+    });
+
+    this.eventSource.addEventListener('quest_status', (e) => {
+      this.updateQuestRunningUI(JSON.parse(e.data));
+    });
+
+    this.eventSource.addEventListener('purge_status', (e) => {
+      this.updatePurgeUI(JSON.parse(e.data));
+    });
+
+    this.eventSource.addEventListener('stream_update', (e) => {
+      this.updateStreamUI(JSON.parse(e.data));
+    });
+
+    this.eventSource.addEventListener('user_update', (e) => {
+      const data = JSON.parse(e.data);
+      this.renderUserProfile(data.user);
+    });
+  }
+
+  async fetchInitialStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      if (data.user) this.renderUserProfile(data.user);
+      if (data.diversity) this.updateDiversityUI(data.diversity);
+      if (data.playtime) this.updatePlaytimeUI(data.playtime);
+      if (data.quest) this.updateQuestRunningUI(data.quest);
+      if (data.purge) this.updatePurgeUI(data.purge);
+      if (data.stream) this.updateStreamUI(data.stream);
+      if (data.autoResponder) this.updateAutoResponderUI(data.autoResponder);
+      if (data.accounts) {
+        this.accounts = data.accounts;
+        this.renderAccountsVault();
+      }
+    } catch (e) {
+      console.warn('Status fetch error:', e);
+    }
+  }
+
+  // --- AUTHENTICATION & MULTI-ACCOUNT ---
+  async login(token, showToast = true, label = '') {
+    const alertBox = document.getElementById('tokenModalAlert');
+    const btnSubmit = document.getElementById('btnSubmitToken');
+    let cleanToken = (token || '').trim().replace(/^['"]|['"]$/g, '').replace(/^(Authorization:|Bearer|Bot)\s+/i, '').trim();
+
+    if (!cleanToken) {
+      if (alertBox) {
+        alertBox.className = 'text-xs p-3 rounded-xl border font-mono bg-rose-500/10 border-rose-500/30 text-rose-300 block mb-2';
+        alertBox.textContent = 'Vui lòng dán chuỗi User Token hợp lệ.';
+      } else {
+        alert('Vui lòng dán chuỗi User Token hợp lệ.');
+      }
+      return;
+    }
+
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span> Đang xác thực...`;
+    }
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: cleanToken, label: label || 'Tài khoản chính' })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        this.user = data.profile;
+        this.token = cleanToken;
+        localStorage.setItem('discord_user_token', cleanToken);
+        this.renderUserProfile(data.profile);
+        if (data.accounts) {
+          this.accounts = data.accounts;
+          this.renderAccountsVault();
+        }
+
+        if (alertBox) {
+          alertBox.className = 'text-xs p-3 rounded-xl border font-mono bg-emerald-500/10 border-emerald-500/30 text-emerald-300 block mb-2';
+          alertBox.textContent = `✅ Xác thực thành công: @${data.profile.username}!`;
+        }
+
+        setTimeout(() => {
+          this.closeTokenModal();
+          this.loadQuests();
+        }, 500);
+      } else {
+        const errorMsg = data.message || 'Token không hợp lệ hoặc đã hết hạn (Mã 401).';
+        if (alertBox) {
+          alertBox.className = 'text-xs p-3 rounded-xl border font-mono bg-rose-500/10 border-rose-500/30 text-rose-300 block mb-2';
+          alertBox.textContent = `❌ Đăng nhập thất bại: ${errorMsg}`;
+        } else {
+          alert(`Đăng nhập thất bại: ${errorMsg}`);
+        }
+      }
+    } catch (err) {
+      if (alertBox) {
+        alertBox.className = 'text-xs p-3 rounded-xl border font-mono bg-rose-500/10 border-rose-500/30 text-rose-300 block mb-2';
+        alertBox.textContent = `❌ Lỗi kết nối local: ${err.message}`;
+      }
+    } finally {
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = `<span>Xác thực & Thêm vào Vault</span>`;
+      }
+    }
+  }
+
+  async logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    this.user = null;
+    this.token = null;
+    localStorage.removeItem('discord_user_token');
+    this.renderUserProfile(null);
+  }
+
+  async switchAccount(accountId) {
+    try {
+      const res = await fetch('/api/accounts/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        this.user = data.profile;
+        this.token = data.profile.token || this.token;
+        this.renderUserProfile(data.profile);
+        if (data.accounts) {
+          this.accounts = data.accounts;
+          this.renderAccountsVault();
+        }
+        alert(`Đã chuyển sang tài khoản @${data.profile.username}!`);
+      } else {
+        alert(data.message);
+      }
+    } catch (e) {
+      alert(`Lỗi chuyển tài khoản: ${e.message}`);
+    }
+  }
+
+  async deleteAccountFromVault(accountId) {
+    if (!confirm('Bạn có chắc muốn xóa tài khoản này khỏi Vault?')) return;
+    const res = await fetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      this.accounts = data.accounts;
+      this.renderAccountsVault();
+    }
+  }
+
+  renderUserProfile(profile) {
+    const area = document.getElementById('userProfileArea');
+    if (!profile) {
+      area.innerHTML = `
+        <button id="btnLoginModal" onclick="window.discordApp?.openTokenModal()" class="flex items-center space-x-2 bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-2 rounded-lg font-bold text-xs sm:text-sm transition-all shadow-md hover:shadow-indigo-500/25 cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+          <span>Nhập User Token</span>
+        </button>`;
+      return;
+    }
+
+    const avatarUrl = profile.avatar
+      ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=64`
+      : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+    const displayName = profile.global_name || profile.username;
+
+    area.innerHTML = `
+      <div class="flex items-center space-x-3 bg-[#1e1f22] pl-2 pr-3 py-1 rounded-xl border border-[#383a40]">
+        <img src="${avatarUrl}" alt="Avatar" class="w-8 h-8 rounded-full border border-[#5865f2]/50 object-cover">
+        <div class="flex flex-col">
+          <div class="flex items-center space-x-1.5">
+            <span class="text-xs font-bold text-white max-w-[120px] truncate">${this.escapeHtml(displayName)}</span>
+            <span class="text-[10px] text-[#949ba4] font-mono">@${this.escapeHtml(profile.username)}</span>
+          </div>
+          <div class="flex items-center space-x-1.5 text-[10px]">
+            <span class="text-emerald-400 font-mono">Analytics: OK</span>
+          </div>
+        </div>
+        <button id="btnLogout" title="Đăng xuất" class="ml-2 text-[#949ba4] hover:text-red-400 p-1 rounded transition-colors cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+        </button>
+      </div>`;
+
+    document.getElementById('btnLogout')?.addEventListener('click', () => this.logout());
+
+    const streamerLabel = document.getElementById('streamerActiveUserLabel');
+    if (streamerLabel) {
+      streamerLabel.textContent = `@${profile.username} (${profile.id})`;
+    }
+  }
+
+  renderAccountsVault() {
+    const list = document.getElementById('vaultAccountsList');
+    if (!list) return;
+
+    if (!this.accounts || this.accounts.length === 0) {
+      list.innerHTML = `<div class="text-center py-6 text-xs text-[#949ba4]">Chưa lưu tài khoản nào trong Vault.</div>`;
+      return;
+    }
+
+    list.innerHTML = this.accounts.map(acc => {
+      const avatarUrl = acc.avatar
+        ? `https://cdn.discordapp.com/avatars/${acc.userId}/${acc.avatar}.png?size=64`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+      return `
+        <div class="flex items-center justify-between bg-[#1e1f22] p-2.5 rounded-xl border ${acc.isActive ? 'border-[#5865f2] bg-[#5865f2]/5' : 'border-[#383a40]'} transition-all">
+          <div class="flex items-center space-x-3">
+            <img src="${avatarUrl}" class="w-8 h-8 rounded-full border border-gray-600 object-cover">
+            <div>
+              <div class="flex items-center space-x-1.5">
+                <span class="text-xs font-bold text-white">${this.escapeHtml(acc.label)}</span>
+                ${acc.isActive ? '<span class="bg-emerald-500/20 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">Active</span>' : ''}
+              </div>
+              <div class="text-[11px] text-[#949ba4] font-mono">@${this.escapeHtml(acc.username)} • ID: ${acc.userId}</div>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            ${!acc.isActive ? `
+              <button class="btn-switch-account bg-[#313338] hover:bg-[#5865f2] text-white px-2.5 py-1 rounded text-xs font-semibold transition-all" data-id="${acc.id}">
+                Chuyển
+              </button>
+            ` : ''}
+            <button class="btn-del-account text-[#949ba4] hover:text-red-400 p-1" data-id="${acc.id}" title="Xóa khỏi Vault">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.btn-switch-account').forEach(btn => {
+      btn.addEventListener('click', () => this.switchAccount(btn.dataset.id));
+    });
+
+    list.querySelectorAll('.btn-del-account').forEach(btn => {
+      btn.addEventListener('click', () => this.deleteAccountFromVault(btn.dataset.id));
+    });
+
+    const viewerSelect = document.getElementById('streamViewerAccountSelect');
+    if (viewerSelect) {
+      const curVal = viewerSelect.value;
+      viewerSelect.innerHTML = '<option value="">-- Chọn từ Két tài khoản hoặc dán Token bên dưới --</option>';
+      (this.accounts || []).forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc.id;
+        opt.textContent = `${acc.label || acc.username} (@${acc.username}) ${acc.isActive ? '[Tài khoản chính]' : ''}`;
+        viewerSelect.appendChild(opt);
+      });
+      if (curVal) viewerSelect.value = curVal;
+    }
+  }
+
+  // --- RICH PRESENCE STUDIO ---
+  async setSpotifyPresence() {
+    const song = document.getElementById('spotifySong').value.trim() || 'Starboy';
+    const artist = document.getElementById('spotifyArtist').value.trim() || 'The Weeknd';
+    const album = document.getElementById('spotifyAlbum').value.trim() || 'Starboy';
+    const durationSec = parseInt(document.getElementById('spotifyDuration').value) || 230;
+
+    await fetch('/api/presence/spotify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ song, artist, album, durationSec })
+    });
+    alert(`Đã kích hoạt giả lập Spotify: "${song}" - ${artist}`);
+  }
+
+  async clearPresence() {
+    await fetch('/api/presence/clear', { method: 'POST' });
+    alert('Đã xóa bỏ trạng thái hiển thị trên hồ sơ!');
+  }
+
+  async setStreamingPresence() {
+    const title = document.getElementById('streamTitle').value.trim() || 'Live Coding';
+    const twitchUrl = document.getElementById('streamUrl').value.trim() || 'https://twitch.tv/discord';
+
+    await fetch('/api/presence/streaming', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, twitchUrl })
+    });
+    alert(`Đã bật trạng thái Streaming (Tím): "${title}"`);
+  }
+
+  async setCustomGamePresence() {
+    const gameName = document.getElementById('customPresName').value.trim() || 'Visual Studio Code';
+    const details = document.getElementById('customPresDetails').value.trim();
+    const button1Label = document.getElementById('customPresBtn1Label').value.trim();
+    const button1Url = document.getElementById('customPresBtn1Url').value.trim();
+    const button2Label = document.getElementById('customPresBtn2Label').value.trim();
+    const button2Url = document.getElementById('customPresBtn2Url').value.trim();
+
+    await fetch('/api/presence/custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gameName,
+        details,
+        state: 'Pro Mode',
+        button1Label,
+        button1Url,
+        button2Label,
+        button2Url
+      })
+    });
+    alert(`Đã kích hoạt Custom Presence: "${gameName}"`);
+  }
+
+  async setHypeSquadHouse(houseId) {
+    if (!this.token) {
+      this.openTokenModal();
+      return;
+    }
+    const res = await fetch('/api/profile/hypesquad', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ houseId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('Đã cập nhật nhà HypeSquad thành công! Làm mới Discord để xem huy hiệu mới.');
+    } else {
+      alert(`Lỗi đổi HypeSquad: ${data.message}`);
+    }
+  }
+
+  async saveProfileInfo() {
+    if (!this.token) {
+      this.openTokenModal();
+      return;
+    }
+    const global_name = document.getElementById('profileGlobalName').value.trim();
+    const bio = document.getElementById('profileBio').value.trim();
+
+    const payload = {};
+    if (global_name) payload.global_name = global_name;
+    if (bio) payload.bio = bio;
+
+    const res = await fetch('/api/profile/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('Đã cập nhật hồ sơ cá nhân thành công!');
+    } else {
+      alert(`Lỗi cập nhật hồ sơ: ${data.message}`);
+    }
+  }
+
+  // --- GHOST MESSAGE PURGER ---
+  async startMessagePurge() {
+    if (!this.token) {
+      this.openTokenModal();
+      return;
+    }
+    const channelId = document.getElementById('purgeChannelId').value.trim();
+    const delayMs = parseInt(document.getElementById('purgeDelayMs').value) || 1200;
+
+    if (!channelId) {
+      alert('Vui lòng nhập Channel ID hoặc DM ID cần xóa tin nhắn!');
+      return;
+    }
+
+    const res = await fetch('/api/messages/purge-start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId, delayMs })
+    });
+    const data = await res.json();
+    if (!data.success) alert(data.message);
+  }
+
+  async stopMessagePurge() {
+    await fetch('/api/messages/purge-stop', { method: 'POST' });
+  }
+
+  updatePurgeUI(status) {
+    const isRunning = status.status === 'running';
+    document.getElementById('btnStartPurge').disabled = isRunning;
+    document.getElementById('btnStopPurge').disabled = !isRunning;
+    document.getElementById('purgeScannedCount').textContent = status.totalScanned || 0;
+    document.getElementById('purgeDeletedCount').textContent = status.totalDeleted || 0;
+  }
+
+  // --- AFK AUTO RESPONDER ---
+  async saveAutoResponderSettings() {
+    const enabled = document.getElementById('autoResponderToggle').checked;
+    const message = document.getElementById('autoResponderMessage').value.trim();
+    const cooldownMinutes = parseInt(document.getElementById('autoResponderCooldown').value) || 15;
+
+    await fetch('/api/auto-responder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, message, cooldownMinutes })
+    });
+    alert('Đã lưu cấu hình AFK Auto-Responder!');
+  }
+
+  updateAutoResponderUI(settings) {
+    if (settings.enabled !== undefined) {
+      document.getElementById('autoResponderToggle').checked = Boolean(settings.enabled);
+    }
+    if (settings.message) {
+      document.getElementById('autoResponderMessage').value = settings.message;
+    }
+    if (settings.cooldownMinutes) {
+      document.getElementById('autoResponderCooldown').value = settings.cooldownMinutes;
+    }
+  }
+
+  // --- FRIENDS MANAGER ---
+  async loadFriends() {
+    if (!this.token) return;
+    const tbody = document.getElementById('friendsTableBody');
+    tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-[#949ba4]"><div class="inline-block animate-spin h-5 w-5 border-b-2 border-indigo-400"></div> Đang quét danh sách bạn bè...</td></tr>`;
+
+    try {
+      const res = await fetch('/api/friends');
+      const data = await res.json();
+      this.friendsList = data.data || [];
+      this.renderFriendsTable();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-rose-400">Lỗi: ${e.message}</td></tr>`;
+    }
+  }
+
+  renderFriendsTable() {
+    const tbody = document.getElementById('friendsTableBody');
+    const filtered = this.friendsList.filter(f => String(f.type) === String(this.currentFriendFilter));
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-[#949ba4]">Không có mục nào trong danh mục này.</td></tr>`;
+      return;
+    }
+
+    const typeNames = {
+      '1': '<span class="text-emerald-400 font-bold">Bạn Bè</span>',
+      '2': '<span class="text-rose-400 font-bold">Đã Chặn</span>',
+      '3': '<span class="text-amber-400 font-bold">Lời Mời Đến</span>',
+      '4': '<span class="text-blue-400 font-bold">Lời Mời Đã Gửi</span>'
+    };
+
+    tbody.innerHTML = filtered.map(f => {
+      const u = f.user || {};
+      const avatarUrl = u.avatar
+        ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=32`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+      return `
+        <tr class="hover:bg-white/[0.02]">
+          <td class="p-3"><input type="checkbox" class="friend-checkbox" value="${u.id}"></td>
+          <td class="p-3 flex items-center space-x-2.5">
+            <img src="${avatarUrl}" class="w-6 h-6 rounded-full object-cover">
+            <div>
+              <span class="font-bold text-white">${this.escapeHtml(u.global_name || u.username)}</span>
+              <span class="text-[#949ba4] text-[10px] block">@${this.escapeHtml(u.username)}</span>
+            </div>
+          </td>
+          <td class="p-3 font-mono text-[#949ba4]">${u.id}</td>
+          <td class="p-3 font-mono text-[11px]">${typeNames[String(f.type)] || f.type}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async batchUnfriend() {
+    const checked = Array.from(document.querySelectorAll('.friend-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) {
+      alert('Vui lòng chọn ít nhất một người dùng từ bảng!');
+      return;
+    }
+    if (!confirm(`Bạn có chắc muốn gỡ / hủy kết bạn với ${checked.length} người này?`)) return;
+
+    const res = await fetch('/api/friends/remove-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds: checked })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert(`Đã hoàn tất gỡ ${data.count} người dùng!`);
+      this.loadFriends();
+    }
+  }
+
+  // --- SERVERS MANAGER ---
+  async loadServers() {
+    if (!this.token) return;
+    const tbody = document.getElementById('serversTableBody');
+    tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-[#949ba4]"><div class="inline-block animate-spin h-5 w-5 border-b-2 border-indigo-400"></div> Đang quét các Server đã tham gia...</td></tr>`;
+
+    try {
+      const res = await fetch('/api/servers');
+      const data = await res.json();
+      this.serversList = data.data || [];
+      this.renderServersTable();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-rose-400">Lỗi: ${e.message}</td></tr>`;
+    }
+  }
+
+  renderServersTable() {
+    const tbody = document.getElementById('serversTableBody');
+    if (!this.serversList || this.serversList.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-[#949ba4]">Không tìm thấy Server nào.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = this.serversList.map(s => {
+      const iconUrl = s.icon
+        ? `https://cdn.discordapp.com/icons/${s.id}/${s.icon}.png?size=32`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+      return `
+        <tr class="hover:bg-white/[0.02]">
+          <td class="p-3"><input type="checkbox" class="server-checkbox" value="${s.id}"></td>
+          <td class="p-3 flex items-center space-x-2.5">
+            <img src="${iconUrl}" class="w-6 h-6 rounded-lg object-cover">
+            <span class="font-bold text-white">${this.escapeHtml(s.name)}</span>
+          </td>
+          <td class="p-3 font-mono text-[#949ba4]">${s.id}</td>
+          <td class="p-3 font-mono text-[11px]">${s.owner ? '<span class="text-amber-400 font-bold">Owner 👑</span>' : '<span class="text-gray-400">Thành viên</span>'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async batchLeaveServers() {
+    const checked = Array.from(document.querySelectorAll('.server-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) {
+      alert('Vui lòng chọn ít nhất một Server từ bảng!');
+      return;
+    }
+    if (!confirm(`Bạn có chắc muốn RỜI HÀNG LOẠT ${checked.length} server này?`)) return;
+
+    const res = await fetch('/api/servers/leave-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guildIds: checked })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert(`Đã hoàn tất rời ${data.count} server!`);
+      this.loadServers();
+    }
+  }
+
+  // --- SECURITY & SESSIONS ---
+  async loadSessions() {
+    const container = document.getElementById('activeSessionsList');
+    container.innerHTML = `<div class="col-span-full text-center py-6 text-xs text-[#949ba4]">Đang quét các phiên đăng nhập...</div>`;
+
+    const res = await fetch('/api/security/sessions');
+    const data = await res.json();
+    const sessions = data.data || [];
+
+    if (sessions.length === 0) {
+      container.innerHTML = `<div class="col-span-full text-center py-6 text-xs text-[#949ba4]">Không tìm thấy phiên đăng nhập mở rộng.</div>`;
+      return;
+    }
+
+    container.innerHTML = sessions.map(s => `
+      <div class="bg-[#1e1f22] p-3 rounded-xl border border-[#383a40] space-y-1 text-xs font-mono">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-white">${this.escapeHtml(s.client_info?.os || 'Desktop')}</span>
+          <span class="text-[10px] text-emerald-400 font-bold">${s.current_session ? 'Hiện tại' : ''}</span>
+        </div>
+        <div class="text-[11px] text-[#949ba4]">Client: ${this.escapeHtml(s.client_info?.client || 'Discord Client')}</div>
+        <div class="text-[10px] text-gray-500">Hoạt động: ${s.approx_last_used_time ? new Date(s.approx_last_used_time).toLocaleString('vi-VN') : 'Gần đây'}</div>
+      </div>
+    `).join('');
+  }
+
+  async loadOAuth() {
+    const container = document.getElementById('oauthTokensList');
+    container.innerHTML = `<div class="text-center py-6 text-xs text-[#949ba4]">Đang quét các ứng dụng OAuth2...</div>`;
+
+    const res = await fetch('/api/security/oauth');
+    const data = await res.json();
+    const tokens = data.data || [];
+
+    if (tokens.length === 0) {
+      container.innerHTML = `<div class="text-center py-6 text-xs text-[#949ba4]">Không có ứng dụng nào được cấp quyền ủy quyền.</div>`;
+      return;
+    }
+
+    container.innerHTML = tokens.map(t => {
+      const app = t.application || {};
+      const iconUrl = app.icon
+        ? `https://cdn.discordapp.com/app-icons/${app.id}/${app.icon}.png?size=32`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+      return `
+        <div class="flex items-center justify-between bg-[#1e1f22] p-2.5 rounded-xl border border-[#383a40]">
+          <div class="flex items-center space-x-2.5">
+            <img src="${iconUrl}" class="w-7 h-7 rounded-lg object-cover">
+            <div>
+              <span class="text-xs font-bold text-white">${this.escapeHtml(app.name || 'Bot')}</span>
+              <span class="text-[10px] text-[#949ba4] block">Scopes: ${(t.scopes || []).join(', ')}</span>
+            </div>
+          </div>
+          <button class="btn-revoke-oauth bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white px-2 py-1 rounded text-xs font-bold transition-all" data-id="${t.id}">
+            Hủy Quyền
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.btn-revoke-oauth').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Bạn có chắc muốn hủy quyền ứng dụng này?')) return;
+        const res2 = await fetch('/api/security/revoke-oauth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tokenId: btn.dataset.id })
+        });
+        const data2 = await res2.json();
+        if (data2.success) {
+          alert('Đã hủy quyền ứng dụng thành công!');
+          this.loadOAuth();
+        }
+      });
+    });
+  }
+
+  // --- BADGES: GAME DIVERSITY ---
+  async startDiversity() {
+    if (!this.token) {
+      this.openTokenModal();
+      return;
+    }
+    const res = await fetch('/api/diversity/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetCount: this.diversityTarget })
+    });
+    const data = await res.json();
+    if (!data.success) alert(data.message);
+  }
+
+  async pauseDiversity() { await fetch('/api/diversity/pause', { method: 'POST' }); }
+  async resumeDiversity() { await fetch('/api/diversity/resume', { method: 'POST' }); }
+  async stopDiversity() { await fetch('/api/diversity/stop', { method: 'POST' }); }
+
+  updateDiversityUI(status) {
+    const isRunning = status.status === 'running';
+    const isPaused = status.status === 'paused';
+    const btnStart = document.getElementById('btnStartDiversity');
+    const btnPause = document.getElementById('btnPauseDiversity');
+    const btnStop = document.getElementById('btnStopDiversity');
+    const badge = document.getElementById('diversityStateBadge');
+
+    btnStart.disabled = isRunning || isPaused;
+    btnPause.disabled = !isRunning && !isPaused;
+    btnStop.disabled = !isRunning && !isPaused;
+
+    if (isPaused) {
+      btnPause.textContent = 'Tiếp tục';
+      btnPause.onclick = () => this.resumeDiversity();
+      badge.textContent = 'Tạm dừng';
+      badge.className = 'text-xs font-mono px-2.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/30';
+    } else if (isRunning) {
+      btnPause.textContent = 'Tạm dừng';
+      btnPause.onclick = () => this.pauseDiversity();
+      badge.textContent = 'Đang chạy (Live)';
+      badge.className = 'text-xs font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 pulse-indicator';
+    } else if (status.status === 'completed') {
+      badge.textContent = 'Hoàn thành!';
+      badge.className = 'text-xs font-mono px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30';
+    } else {
+      badge.textContent = 'Sẵn sàng';
+      badge.className = 'text-xs font-mono px-2.5 py-0.5 rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30';
+    }
+
+    const pct = status.target > 0 ? Math.round((status.current / status.target) * 100) : 0;
+    document.getElementById('diversityProgressBar').style.width = `${pct}%`;
+    document.getElementById('diversityProgressText').textContent = `${status.current} / ${status.target} Games (${pct}%)`;
+  }
+
+  // --- BADGES: PLAYTIME ---
+  loadPresets() {
+    const presets = [
+      { id: '730', name: 'Counter-Strike 2', executable: 'cs2.exe' },
+      { id: '700136079562375258', name: 'VALORANT', executable: 'VALORANT-Win64-Shipping.exe' },
+      { id: '424424351650070529', name: 'Grand Theft Auto V', executable: 'gta5.exe' },
+      { id: '356860074901241856', name: 'League of Legends', executable: 'League of Legends.exe' },
+      { id: '356875221078245376', name: 'Minecraft', executable: 'javaw.exe' },
+      { id: '564177579848564757', name: 'Cyberpunk 2077', executable: 'Cyberpunk2077.exe' }
+    ];
+
+    const container = document.getElementById('playtimePresetContainer');
+    container.innerHTML = presets.map((p, idx) => `
+      <button class="playtime-preset-chip text-xs px-3 py-1.5 rounded-lg border border-[#3f4147] transition-all ${idx === 0 ? 'bg-[#5865f2] text-white font-bold' : 'bg-[#1e1f22] text-[#dbdee1] hover:bg-[#383a40]'}"
+        data-id="${p.id}" data-name="${p.name}" data-exe="${p.executable}">
+        ${p.name}
+      </button>
+    `).join('');
+
+    container.querySelectorAll('.playtime-preset-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.querySelectorAll('.playtime-preset-chip').forEach(b => {
+          b.className = 'playtime-preset-chip text-xs px-3 py-1.5 rounded-lg border border-[#3f4147] transition-all bg-[#1e1f22] text-[#dbdee1] hover:bg-[#383a40]';
+        });
+        btn.className = 'playtime-preset-chip text-xs px-3 py-1.5 rounded-lg border border-[#3f4147] transition-all bg-[#5865f2] text-white font-bold';
+
+        this.selectedPlaytimeGame = { id: btn.dataset.id, name: btn.dataset.name, executable: btn.dataset.exe };
+        document.getElementById('playtimeSelectedGameTitle').textContent = this.selectedPlaytimeGame.name;
+        document.getElementById('playtimeSelectedGameDetails').textContent = `ID: ${this.selectedPlaytimeGame.id} | ${this.selectedPlaytimeGame.executable}`;
+      });
+    });
+  }
+
+  async startPlaytime() {
+    if (!this.token) { this.openTokenModal(); return; }
+    const res = await fetch('/api/playtime/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gameId: this.selectedPlaytimeGame.id,
+        gameName: this.selectedPlaytimeGame.name,
+        executable: this.selectedPlaytimeGame.executable,
+        intervalSec: 30
+      })
+    });
+    const data = await res.json();
+    if (!data.success) alert(data.message);
+  }
+
+  async stopPlaytime() { await fetch('/api/playtime/stop', { method: 'POST' }); }
+
+  updatePlaytimeUI(status) {
+    const isRunning = status.status === 'running';
+    document.getElementById('btnStartPlaytime').disabled = isRunning;
+    document.getElementById('btnStopPlaytime').disabled = !isRunning;
+
+    const totalSec = status.elapsedSeconds || 0;
+    const hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+    const secs = String(totalSec % 60).padStart(2, '0');
+    document.getElementById('playtimeBigTimer').textContent = `${hrs}:${mins}:${secs}`;
+  }
+
+  // --- HEADLESS STREAMER & SCREEN SHARE AFK ---
+  async startStream() {
+    const channelId = document.getElementById('streamChannelId')?.value.trim();
+    if (!channelId) {
+      this.showToast('Vui lòng nhập Voice Channel ID (ID Kênh thoại)!', 'error');
+      document.getElementById('streamChannelId')?.focus();
+      return;
+    }
+
+    const viewerSelect = document.getElementById('streamViewerAccountSelect')?.value;
+    const viewerCustom = document.getElementById('streamViewerTokenCustom')?.value.trim();
+    const viewerToken = viewerCustom || viewerSelect || null;
+    const resolution = document.getElementById('streamResolution')?.value || '720p';
+
+    const btnStart = document.getElementById('btnStartStream');
+    if (btnStart) {
+      btnStart.disabled = true;
+      btnStart.innerHTML = '<span>Đang kết nối...</span>';
+    }
+
+    try {
+      const res = await fetch('/api/stream/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId,
+          viewerToken,
+          resolution,
+          fps: 15
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        this.showToast(data.message || 'Lỗi khi bắt đầu Stream.', 'error');
+        if (btnStart) {
+          btnStart.disabled = false;
+          btnStart.innerHTML = '<span>Bắt đầu Treo Stream 24/7 (Headless)</span>';
+        }
+      } else {
+        this.showToast('Đã khởi chạy tiến trình Headless Streamer!', 'success');
+        this.updateStreamUI(data.status);
+      }
+    } catch (e) {
+      this.showToast(`Lỗi kết nối: ${e.message}`, 'error');
+      if (btnStart) {
+        btnStart.disabled = false;
+        btnStart.innerHTML = '<span>Bắt đầu Treo Stream 24/7 (Headless)</span>';
+      }
+    }
+  }
+
+  async stopStream() {
+    const btnStop = document.getElementById('btnStopStream');
+    if (btnStop) btnStop.disabled = true;
+    try {
+      const res = await fetch('/api/stream/stop', { method: 'POST' });
+      const data = await res.json();
+      this.showToast('Đã gửi lệnh dừng Stream.', 'info');
+      this.updateStreamUI(data.status || { running: false });
+    } catch (e) {
+      this.showToast(`Lỗi: ${e.message}`, 'error');
+    }
+  }
+
+  updateStreamUI(status) {
+    if (!status) return;
+
+    const btnStart = document.getElementById('btnStartStream');
+    const btnStop = document.getElementById('btnStopStream');
+    const badge = document.getElementById('streamStateBadge');
+    const timer = document.getElementById('streamTimer');
+    const loopInfo = document.getElementById('streamLoopInfo');
+    const streamerIndicator = document.getElementById('streamerStatusIndicator');
+    const viewerIndicator = document.getElementById('viewerStatusIndicator');
+    const channelNameEl = document.getElementById('streamChannelName');
+
+    if (status.running) {
+      if (btnStart) {
+        btnStart.disabled = true;
+        btnStart.className = 'flex-1 bg-[#313338] text-gray-400 py-2.5 rounded-lg font-bold text-xs cursor-not-allowed';
+        btnStart.innerHTML = '<span>● Đang Stream 24/7</span>';
+      }
+      if (btnStop) {
+        btnStop.disabled = false;
+        btnStop.className = 'bg-[#da373c] hover:bg-[#c02e33] text-white px-5 py-2.5 rounded-lg font-bold text-xs shadow-md transition-all cursor-pointer';
+      }
+      if (badge) {
+        badge.className = 'text-xs font-mono px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        badge.textContent = 'Đang phát Go Live';
+      }
+    } else {
+      if (btnStart) {
+        btnStart.disabled = false;
+        btnStart.className = 'flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white py-2.5 rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer';
+        btnStart.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Bắt đầu Treo Stream 24/7 (Headless)</span>';
+      }
+      if (btnStop) {
+        btnStop.disabled = true;
+        btnStop.className = 'disabled:opacity-40 disabled:cursor-not-allowed bg-[#da373c] text-white px-5 py-2.5 rounded-lg font-bold text-xs';
+      }
+      if (badge) {
+        badge.className = 'text-xs font-mono px-3 py-1 rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30';
+        badge.textContent = 'Sẵn sàng';
+      }
+    }
+
+    if (timer) {
+      const totalSec = status.elapsedSeconds || 0;
+      const hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+      const secs = String(totalSec % 60).padStart(2, '0');
+      timer.textContent = `${hrs}:${mins}:${secs}`;
+    }
+
+    if (loopInfo) {
+      loopInfo.textContent = `Gói RTP Video: ${status.loopCount || 0} loops`;
+    }
+
+    if (streamerIndicator) {
+      if (status.streamerState === 'streaming') {
+        streamerIndicator.className = 'font-semibold text-emerald-400 font-mono';
+        streamerIndicator.textContent = '● Đang Stream Go Live';
+      } else if (status.streamerState === 'connected') {
+        streamerIndicator.className = 'font-semibold text-blue-400 font-mono';
+        streamerIndicator.textContent = 'Đã vào phòng';
+      } else if (status.streamerState === 'logging_in') {
+        streamerIndicator.className = 'font-semibold text-amber-400 font-mono';
+        streamerIndicator.textContent = 'Đang đăng nhập...';
+      } else if (status.streamerState === 'error') {
+        streamerIndicator.className = 'font-semibold text-rose-400 font-mono';
+        streamerIndicator.textContent = 'Lỗi kết nối';
+      } else {
+        streamerIndicator.className = 'font-semibold text-gray-400 font-mono';
+        streamerIndicator.textContent = 'Chưa kết nối';
+      }
+    }
+
+    if (viewerIndicator) {
+      if (status.viewerState === 'connected') {
+        viewerIndicator.className = 'font-semibold text-emerald-400 font-mono';
+        viewerIndicator.textContent = '● Đã vào làm khán giả';
+      } else if (status.viewerState === 'logging_in') {
+        viewerIndicator.className = 'font-semibold text-amber-400 font-mono';
+        viewerIndicator.textContent = 'Đang kết nối...';
+      } else if (status.viewerState === 'disabled') {
+        viewerIndicator.className = 'font-semibold text-amber-300 font-mono';
+        viewerIndicator.textContent = 'Chờ vào thủ công';
+      } else if (status.viewerState === 'error') {
+        viewerIndicator.className = 'font-semibold text-rose-400 font-mono';
+        viewerIndicator.textContent = 'Lỗi kết nối nick phụ';
+      } else {
+        viewerIndicator.className = 'font-semibold text-gray-400 font-mono';
+        viewerIndicator.textContent = 'Chưa vào phòng';
+      }
+    }
+
+    if (channelNameEl && (status.channelName || status.channelId)) {
+      channelNameEl.textContent = status.channelName ? `#${status.channelName}` : status.channelId;
+    }
+  }
+
+  // --- BADGES: QUESTS ---
+  async loadQuests() {
+    if (!this.token) return;
+    const grid = document.getElementById('questsGrid');
+    grid.innerHTML = `<div class="col-span-full text-center py-8 text-[#949ba4]"><div class="inline-block animate-spin h-6 w-6 border-b-2 border-amber-400 mb-2"></div><p>Đang quét Discord Quests...</p></div>`;
+
+    try {
+      const res = await fetch('/api/quests');
+      const data = await res.json();
+      const quests = data.quests || [];
+
+      if (quests.length === 0) {
+        grid.innerHTML = `<div class="col-span-full text-center py-8 text-[#949ba4]">Hiện không có Quest nào khả dụng hoặc bạn đã hoàn thành hết!</div>`;
+        return;
+      }
+
+      grid.innerHTML = quests.map(q => {
+        const questName = q.config?.messages?.quest_name || q.config?.messages?.game_title || 'Discord Quest';
+        const gameTitle = q.config?.messages?.game_title || q.config?.application?.name || 'Game';
+        const appId = q.config?.application?.id || '';
+        const targetSeconds = q.config?.task_config?.tasks?.PLAY_ON_DESKTOP?.target || 900;
+        const targetMins = Math.round(targetSeconds / 60);
+        const isCompleted = Boolean(q.user_status?.completed_at);
+
+        return `
+          <div class="bg-[#242629] rounded-xl border border-[#383a40] p-4 flex flex-col justify-between space-y-3">
+            <div>
+              <div class="text-[10px] text-amber-400 font-mono font-bold">AppID: ${appId}</div>
+              <h3 class="text-sm font-bold text-white mt-1">${this.escapeHtml(questName)}</h3>
+              <p class="text-xs text-[#949ba4]">Game: <strong class="text-indigo-300">${this.escapeHtml(gameTitle)}</strong> (Chơi ${targetMins} phút)</p>
+            </div>
+            <button class="btn-farm-quest bg-amber-500 hover:bg-amber-600 text-black py-1.5 rounded-lg text-xs font-bold transition-all"
+              data-id="${q.id}" data-name="${this.escapeHtml(questName)}" data-appid="${appId}" data-gamename="${this.escapeHtml(gameTitle)}" data-target="${targetSeconds}">
+              ${isCompleted ? '🎁 Nhận Thưởng' : '⚡ Tự Động Cày 15m'}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      grid.querySelectorAll('.btn-farm-quest').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await fetch('/api/quests/start-farm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              questId: btn.dataset.id,
+              questName: btn.dataset.name,
+              applicationId: btn.dataset.appid,
+              gameName: btn.dataset.gamename,
+              targetSeconds: parseInt(btn.dataset.target) || 900
+            })
+          });
+        });
+      });
+    } catch (e) {
+      grid.innerHTML = `<div class="col-span-full text-center py-6 text-rose-400">Lỗi tải Quests: ${e.message}</div>`;
+    }
+  }
+
+  updateQuestRunningUI(status) {}
+
+  // --- TERMINAL & LOGS ---
+  appendLog(log, live = true) {
+    this.logs.push(log);
+    this.updateLogCount();
+
+    const container = document.getElementById('terminalOutput');
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = `
+      <span class="text-[#949ba4] font-mono text-[11px] select-none">[${log.time}]</span>
+      <span class="log-badge badge-${log.level}">${log.level}</span>
+      <span class="flex-1 font-mono text-xs text-[#dbdee1]">${this.escapeHtml(log.message)}</span>
+    `;
+
+    container.appendChild(div);
+    if (live && this.autoScroll) this.scrollToBottom();
+  }
+
+  updateLogCount() {
+    document.getElementById('logCounterBadge').textContent = `${this.logs.length} events`;
+  }
+
+  scrollToBottom() {
+    const el = document.getElementById('terminalOutput');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  clearLogs() {
+    fetch('/api/logs/clear', { method: 'POST' });
+  }
+
+  // --- TOKEN MODAL ---
+  openTokenModal() {
+    const modal = document.getElementById('tokenModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    const alertBox = document.getElementById('tokenModalAlert');
+    if (alertBox) alertBox.classList.add('hidden');
+    const input = document.getElementById('inputUserToken');
+    if (input) {
+      input.value = this.token || '';
+      setTimeout(() => input.focus(), 60);
+    }
+  }
+
+  closeTokenModal() {
+    const modal = document.getElementById('tokenModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+  }
+
+  // --- EVENT LISTENERS ---
+  setupEventListeners() {
+    // Global Event Delegation for Login Modal
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btnLoginModal') || e.target.closest('.btn-open-login')) {
+        e.preventDefault();
+        this.openTokenModal();
+      }
+      if (e.target.id === 'tokenModal') this.closeTokenModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.closeTokenModal();
+    });
+
+    const tokenInput = document.getElementById('inputUserToken');
+    if (tokenInput) {
+      tokenInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          document.getElementById('btnSubmitToken')?.click();
+        }
+      });
+    }
+
+    // Top Tabs Navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetTab = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.className = 'tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap';
+        });
+        btn.className = 'tab-btn active px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-white bg-[#2b2d31] border-t-2 border-[#5865f2] whitespace-nowrap';
+
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        document.getElementById(targetTab)?.classList.remove('hidden');
+
+        // Tab-specific loaders
+        if (targetTab === 'tab-badges') this.loadQuests();
+        if (targetTab === 'tab-friends') this.loadFriends();
+        if (targetTab === 'tab-servers') this.loadServers();
+        if (targetTab === 'tab-security') {
+          this.renderAccountsVault();
+          this.loadSessions();
+          this.loadOAuth();
+        }
+      });
+    });
+
+    // Subtabs for Badges
+    document.querySelectorAll('.subtab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.subtab;
+        document.querySelectorAll('.subtab-btn').forEach(b => {
+          b.className = 'subtab-btn px-3.5 py-1.5 rounded-lg bg-[#1e1f22] text-[#949ba4] hover:text-white text-xs font-bold transition-all';
+        });
+        btn.className = 'subtab-btn active px-3.5 py-1.5 rounded-lg bg-[#5865f2] text-white text-xs font-bold transition-all';
+
+        document.querySelectorAll('.subtab-content').forEach(c => c.classList.add('hidden'));
+        document.getElementById(target)?.classList.remove('hidden');
+      });
+    });
+
+    // Diversity Controls
+    document.querySelectorAll('.diversity-target-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.diversity-target-btn').forEach(b => {
+          b.className = 'diversity-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-3 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono';
+        });
+        btn.className = 'diversity-target-btn bg-[#5865f2] text-white text-xs px-3 py-1.5 rounded-lg border border-indigo-400 font-bold font-mono';
+        this.diversityTarget = parseInt(btn.dataset.target) || 100;
+        document.getElementById('btnStartDiversity').innerHTML = `<span>Bắt đầu Boost (${this.diversityTarget} Games)</span>`;
+      });
+    });
+
+    document.getElementById('btnStartDiversity').addEventListener('click', () => this.startDiversity());
+    document.getElementById('btnStopDiversity').addEventListener('click', () => this.stopDiversity());
+
+    // Playtime Controls
+    document.getElementById('btnStartPlaytime').addEventListener('click', () => this.startPlaytime());
+    document.getElementById('btnStopPlaytime').addEventListener('click', () => this.stopPlaytime());
+
+    // Headless Stream Controls
+    document.getElementById('btnStartStream')?.addEventListener('click', () => this.startStream());
+    document.getElementById('btnStopStream')?.addEventListener('click', () => this.stopStream());
+
+    // Quests Refresh
+    document.getElementById('btnRefreshQuests').addEventListener('click', () => this.loadQuests());
+
+    // Presence Studio Controls
+    document.getElementById('btnSetSpotify').addEventListener('click', () => this.setSpotifyPresence());
+    document.getElementById('btnClearSpotify').addEventListener('click', () => this.clearPresence());
+    document.getElementById('btnSetStreaming').addEventListener('click', () => this.setStreamingPresence());
+    document.getElementById('btnClearStreaming').addEventListener('click', () => this.clearPresence());
+    document.getElementById('btnSetCustomPresence').addEventListener('click', () => this.setCustomGamePresence());
+
+    document.querySelectorAll('.btn-hypesquad').forEach(btn => {
+      btn.addEventListener('click', () => this.setHypeSquadHouse(parseInt(btn.dataset.house)));
+    });
+    document.getElementById('btnSaveProfile').addEventListener('click', () => this.saveProfileInfo());
+
+    // Message Purger Controls
+    document.getElementById('btnStartPurge').addEventListener('click', () => this.startMessagePurge());
+    document.getElementById('btnStopPurge').addEventListener('click', () => this.stopMessagePurge());
+
+    // Auto Responder Controls
+    document.getElementById('btnSaveAutoResponder').addEventListener('click', () => this.saveAutoResponderSettings());
+
+    // Friends Manager Controls
+    document.getElementById('btnRefreshFriends').addEventListener('click', () => this.loadFriends());
+    document.getElementById('btnBatchUnfriend').addEventListener('click', () => this.batchUnfriend());
+    document.querySelectorAll('.friend-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.friend-filter-btn').forEach(b => {
+          b.className = 'friend-filter-btn px-3 py-1 rounded text-[#949ba4] hover:text-white';
+        });
+        btn.className = 'friend-filter-btn active px-3 py-1 rounded bg-[#5865f2] text-white font-bold';
+        this.currentFriendFilter = btn.dataset.filter;
+        this.renderFriendsTable();
+      });
+    });
+    document.getElementById('selectAllFriends').addEventListener('change', (e) => {
+      document.querySelectorAll('.friend-checkbox').forEach(cb => { cb.checked = e.target.checked; });
+    });
+
+    // Server Manager Controls
+    document.getElementById('btnRefreshServers').addEventListener('click', () => this.loadServers());
+    document.getElementById('btnBatchLeaveServers').addEventListener('click', () => this.batchLeaveServers());
+    document.getElementById('selectAllServers').addEventListener('change', (e) => {
+      document.querySelectorAll('.server-checkbox').forEach(cb => { cb.checked = e.target.checked; });
+    });
+
+    // Security Controls
+    document.getElementById('btnRefreshSessions').addEventListener('click', () => this.loadSessions());
+    document.getElementById('btnRefreshOAuth').addEventListener('click', () => this.loadOAuth());
+
+    // Terminal Controls
+    document.getElementById('btnClearLogs').addEventListener('click', () => this.clearLogs());
+    const btnAutoScroll = document.getElementById('btnAutoScroll');
+    btnAutoScroll.addEventListener('click', () => {
+      this.autoScroll = !this.autoScroll;
+      btnAutoScroll.textContent = `Auto-scroll: ${this.autoScroll ? 'ON' : 'OFF'}`;
+      btnAutoScroll.className = this.autoScroll
+        ? 'bg-[#2b2d31] hover:bg-[#383a40] text-emerald-400 px-2.5 py-1 rounded-lg border border-[#3f4147] font-mono'
+        : 'bg-[#2b2d31] hover:bg-[#383a40] text-[#949ba4] px-2.5 py-1 rounded-lg border border-[#3f4147] font-mono';
+    });
+
+    // Token Modal Controls
+    document.getElementById('btnCloseTokenModal').addEventListener('click', () => this.closeTokenModal());
+    document.getElementById('btnCancelTokenModal').addEventListener('click', () => this.closeTokenModal());
+    document.getElementById('btnSubmitToken').addEventListener('click', () => {
+      const val = document.getElementById('inputUserToken').value.trim();
+      const label = document.getElementById('inputAccountLabel').value.trim();
+      this.login(val, true, label);
+    });
+
+    const btnToggleVis = document.getElementById('btnToggleTokenVisibility');
+    btnToggleVis.addEventListener('click', () => {
+      const input = document.getElementById('inputUserToken');
+      if (input.type === 'password') {
+        input.type = 'text';
+        btnToggleVis.textContent = 'Ẩn';
+      } else {
+        input.type = 'password';
+        btnToggleVis.textContent = 'Hiện';
+      }
+    });
+  }
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+}
+
+// Instantiate on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  window.discordApp = new App();
+});

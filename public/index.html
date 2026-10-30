@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discord Mission Control - Advanced Account Management & Automation Suite</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            discord: {
+              darker: '#1e1f22',
+              card: '#2b2d31',
+              inner: '#313338',
+              hover: '#383a40',
+              blurple: '#5865f2',
+              'blurple-hover': '#4752c4',
+              green: '#23a55a',
+              yellow: '#f0b232',
+              red: '#f23f43'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png" type="image/png">
+</head>
+<body class="bg-[#1e1f22] text-[#dbdee1] min-h-screen flex flex-col antialiased selection:bg-[#5865f2] selection:text-white">
+
+  <!-- TOP NAVBAR -->
+  <header class="bg-[#2b2d31] border-b border-[#1f2023] px-6 py-3 sticky top-0 z-40 shadow-md">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <!-- Logo & Branding -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-[#5865f2] flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <svg class="w-6 h-6 text-white" viewBox="0 0 127.14 96.36" fill="currentColor">
+            <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,0,106,106,0,0,0,22.75,8.09C-2.48,46-1.5,83,1.38,119.5a106.66,106.66,0,0,0,32.61,16.57,77.7,77.7,0,0,0,6.85-11.08,68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1,105.25,105.25,0,0,0,32.63-16.59C128.84,79.8,126.7,42.85,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-white font-black text-lg tracking-wide">Discord Mission Control</h1>
+            <span class="bg-[#5865f2]/20 text-[#5865f2] border border-[#5865f2]/40 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">Suite v3.0 Pro</span>
+          </div>
+          <p class="text-xs text-[#949ba4]">Hệ thống điều khiển & tự động hóa tài khoản Discord chuyên sâu</p>
+        </div>
+      </div>
+
+      <!-- Right Action & Profile Area -->
+      <div class="flex items-center space-x-4">
+        <!-- Live SSE Status Indicator -->
+        <div id="sseStatusBadge" class="hidden sm:flex items-center space-x-2 text-xs bg-[#1e1f22] px-3 py-1.5 rounded-full border border-[#3f4147]">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-indicator"></span>
+          <span id="sseStatusText" class="text-emerald-400 font-mono">Đã kết nối SSE</span>
+        </div>
+
+        <!-- User Profile Pill (Dynamic) -->
+        <div id="userProfileArea" class="flex items-center space-x-3">
+          <button id="btnLoginModal" onclick="window.discordApp?.openTokenModal()" class="flex items-center space-x-2 bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-2 rounded-lg font-bold text-sm transition-all shadow-md hover:shadow-indigo-500/25 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+            <span>Nhập User Token</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-6 py-6 flex-1 w-full flex flex-col space-y-6">
+
+    <!-- TOP SUITE NAVIGATION TABS -->
+    <div class="bg-[#2b2d31] rounded-2xl border border-[#383a40] overflow-hidden shadow-xl flex flex-col">
+      <!-- Tabs Navigation Bar -->
+      <div class="flex items-center space-x-1 px-4 pt-3 border-b border-[#383a40] bg-[#242629] overflow-x-auto">
+        <button data-tab="tab-badges" class="tab-btn active px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-white bg-[#2b2d31] border-t-2 border-[#5865f2] whitespace-nowrap">
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <span>1. Huy Hiệu & Cày Game</span>
+        </button>
+
+        <button data-tab="tab-presence" class="tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
+          <span>2. Hồ Sơ & Rich Presence</span>
+        </button>
+
+        <button data-tab="tab-chat" class="tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap">
+          <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          <span>3. Xóa Tin Nhắn & Auto-Reply</span>
+        </button>
+
+        <button data-tab="tab-friends" class="tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap">
+          <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+          <span>4. Quản Lý Bạn Bè</span>
+        </button>
+
+        <button data-tab="tab-servers" class="tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+          <span>5. Quản Lý Server</span>
+        </button>
+
+        <button data-tab="tab-security" class="tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap">
+          <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+          <span>6. Bảo Mật & Đa Tài Khoản</span>
+        </button>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 1: HUY HIỆU & CÀY GAME (BADGES & QUESTS) -->
+      <!-- ========================================== -->
+      <div id="tab-badges" class="tab-content p-6 space-y-6">
+        <!-- Sub-tabs for Badges -->
+        <div class="flex items-center space-x-2 border-b border-[#383a40] pb-3">
+          <button data-subtab="sub-diversity" class="subtab-btn active px-3.5 py-1.5 rounded-lg bg-[#5865f2] text-white text-xs font-bold transition-all">
+            🎮 Game Diversity 100+
+          </button>
+          <button data-subtab="sub-playtime" class="subtab-btn px-3.5 py-1.5 rounded-lg bg-[#1e1f22] text-[#949ba4] hover:text-white text-xs font-bold transition-all">
+            ⏳ AFK Playtime 5000h
+          </button>
+          <button data-subtab="sub-stream" class="subtab-btn px-3.5 py-1.5 rounded-lg bg-[#1e1f22] text-[#949ba4] hover:text-white text-xs font-bold transition-all">
+            🖥️ Auto Streamer 5000h
+          </button>
+          <button data-subtab="sub-quests" class="subtab-btn px-3.5 py-1.5 rounded-lg bg-[#1e1f22] text-[#949ba4] hover:text-white text-xs font-bold transition-all">
+            🎯 Discord Quests Automator
+          </button>
+        </div>
+
+        <!-- Subtab 1: Game Diversity -->
+        <div id="sub-diversity" class="subtab-content space-y-5">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#313338] p-5 rounded-xl border border-[#3f4147]">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                <span>Game Diversity Milestone (100+ Games Spoofer)</span>
+                <span class="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs px-2.5 py-0.5 rounded-full font-normal">Huy hiệu Thuyết phổ quát</span>
+              </h2>
+              <p class="text-xs text-[#949ba4] mt-1">
+                Gửi trọn vẹn chu trình 3 sự kiện (<code class="bg-black/30 text-indigo-300 px-1 py-0.5 rounded">launch_game</code> + <code class="bg-black/30 text-indigo-300 px-1 py-0.5 rounded">initial_heartbeat</code> + <code class="bg-black/30 text-indigo-300 px-1 py-0.5 rounded">final_heartbeat</code>) kèm thời lượng mô phỏng 3 phút/game.
+              </p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs text-[#949ba4]">Mục tiêu:</span>
+              <button class="diversity-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-3 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono" data-target="50">50</button>
+              <button class="diversity-target-btn bg-[#5865f2] text-white text-xs px-3 py-1.5 rounded-lg border border-indigo-400 font-bold font-mono" data-target="100">100 (Badge)</button>
+              <button class="diversity-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-3 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono" data-target="150">150</button>
+            </div>
+          </div>
+
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-white">Tiến trình kích hoạt: <strong id="diversityProgressText" class="text-indigo-400 font-mono">0 / 100 Games (0%)</strong></span>
+              <span id="diversityStateBadge" class="text-xs font-mono px-2.5 py-0.5 rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">Sẵn sàng</span>
+            </div>
+            <div class="w-full bg-[#1e1f22] h-3.5 rounded-full overflow-hidden p-0.5 border border-[#3f4147]">
+              <div id="diversityProgressBar" class="h-full rounded-full progress-fill progress-fill-animated" style="width: 0%"></div>
+            </div>
+            <div class="flex items-center space-x-3">
+              <button id="btnStartDiversity" class="bg-[#5865f2] hover:bg-[#4752c4] text-white px-5 py-2 rounded-lg font-bold text-xs shadow-md transition-all flex items-center space-x-1.5">
+                <span>Bắt đầu Boost (100 Games)</span>
+              </button>
+              <button id="btnPauseDiversity" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#313338] text-yellow-400 px-4 py-2 rounded-lg text-xs font-semibold border border-[#3f4147]">
+                Tạm dừng
+              </button>
+              <button id="btnStopDiversity" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#313338] text-red-400 px-4 py-2 rounded-lg text-xs font-semibold border border-[#3f4147]">
+                Dừng lại
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtab 2: Playtime Hours -->
+        <div id="sub-playtime" class="subtab-content hidden space-y-5">
+          <div class="bg-[#313338] p-5 rounded-xl border border-[#3f4147]">
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <span>AFK Playtime Hours Booster (Mục tiêu 5.000+ Giờ)</span>
+              <span class="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-xs px-2.5 py-0.5 rounded-full font-normal">Huy hiệu Vĩnh cửu</span>
+            </h2>
+            <p class="text-xs text-[#949ba4] mt-1">Duy trì gửi tín hiệu chạy game liên tục để cộng dồn số giờ chơi cho hồ sơ Discord.</p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="space-y-3">
+              <span class="text-xs font-bold text-white uppercase">Chọn game nhanh:</span>
+              <div class="flex flex-wrap gap-2" id="playtimePresetContainer"></div>
+              <div class="pt-2">
+                <label class="block text-xs font-semibold text-[#949ba4] mb-1">Tìm kiếm trong 24.000+ game Discord:</label>
+                <input type="text" id="playtimeSearchInput" placeholder="Gõ tên game (Cyberpunk, CS2, Valorant...)" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#5865f2]">
+                <div id="playtimeSearchResults" class="hidden mt-1 bg-[#2b2d31] border border-[#3f4147] rounded-lg shadow-xl max-h-48 overflow-y-auto z-20 divide-y divide-[#383a40]"></div>
+              </div>
+            </div>
+
+            <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] flex flex-col justify-between space-y-4">
+              <div>
+                <div class="text-xs font-bold text-[#949ba4] uppercase">Trò chơi đã chọn:</div>
+                <div id="playtimeSelectedGameTitle" class="text-lg font-black text-white mt-1">Counter-Strike 2</div>
+                <div id="playtimeSelectedGameDetails" class="text-xs text-[#949ba4] font-mono">ID: 730 | cs2.exe</div>
+              </div>
+              <div class="bg-[#1e1f22] p-4 rounded-xl border border-[#3f4147] text-center">
+                <div class="text-xs text-[#949ba4]">Thời gian đã cày:</div>
+                <div id="playtimeBigTimer" class="text-3xl font-black text-emerald-400 font-mono tracking-wider">00:00:00</div>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button id="btnStartPlaytime" class="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white py-2 rounded-lg font-bold text-xs shadow-md">Bắt đầu AFK Farm</button>
+                <button id="btnStopPlaytime" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#313338] text-red-400 px-4 py-2 rounded-lg text-xs font-semibold border border-[#3f4147]">Dừng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtab 3: Auto Streamer 5000h (Screen Share Spoofer) -->
+        <div id="sub-stream" class="subtab-content hidden space-y-5">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#313338] p-5 rounded-xl border border-[#3f4147]">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                <span>Headless Screen Share / Stream Spoofer (Huy hiệu Stream)</span>
+                <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-0.5 rounded-full font-normal">Đã stream cho người khác</span>
+              </h2>
+              <p class="text-xs text-[#949ba4] mt-1">
+                Tự động kết nối WebRTC Voice, kích hoạt Go Live Screen Share và đưa tài khoản phụ vào cùng phòng làm khán giả 24/7 trực tiếp trên máy chủ mà không cần mở Discord Desktop hay bật camera/màn hình thật.
+              </p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span id="streamStateBadge" class="text-xs font-mono px-3 py-1 rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                Sẵn sàng
+              </span>
+            </div>
+          </div>
+
+          <!-- Configuration and Control Grid -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Col: Stream Settings -->
+            <div class="lg:col-span-2 bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+              <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-1.5">
+                <span>⚙️ Cấu Hình Kênh Thoại & Tài Khoản</span>
+              </h3>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label class="text-[#949ba4] font-medium block mb-1">
+                    Voice Channel ID (ID Kênh thoại) <span class="text-red-400">*</span>
+                  </label>
+                  <input type="text" id="streamChannelId" placeholder="Ví dụ: 112233445566778899" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white font-mono focus:border-indigo-500 focus:outline-none">
+                  <span class="text-[10px] text-[#949ba4] mt-1 block">Bấm chuột phải vào Kênh thoại trên Discord -> Copy Channel ID</span>
+                </div>
+
+                <div>
+                  <label class="text-[#949ba4] font-medium block mb-1">
+                    Tài khoản phụ (Khán giả / Viewer) <span class="text-emerald-400 font-normal">(Bắt buộc để tính giờ)</span>
+                  </label>
+                  <select id="streamViewerAccountSelect" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white focus:border-indigo-500 focus:outline-none">
+                    <option value="">-- Chọn từ Két tài khoản hoặc tự vào phòng --</option>
+                  </select>
+                  <span class="text-[10px] text-[#949ba4] mt-1 block">Hoặc dán Token nick phụ vào ô bên dưới:</span>
+                  <input type="password" id="streamViewerTokenCustom" placeholder="Hoặc dán Token nick phụ tại đây..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-1.5 mt-1.5 text-white font-mono text-[11px] focus:border-indigo-500 focus:outline-none">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2 border-t border-[#383a40]">
+                <div>
+                  <label class="text-[#949ba4] font-medium block mb-1">Chất lượng luồng video:</label>
+                  <select id="streamResolution" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white">
+                    <option value="720p" selected>640x360 15 FPS (Siêu tiết kiệm CPU & Băng thông - Khuyên dùng)</option>
+                    <option value="720p">720p 30 FPS (Chuẩn)</option>
+                    <option value="1080p">1080p 30 FPS</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[#949ba4] font-medium block mb-1">Tài khoản Streamer:</label>
+                  <div class="bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white flex items-center justify-between">
+                    <span id="streamerActiveUserLabel" class="font-mono text-indigo-400">Đang lấy từ tài khoản chính...</span>
+                    <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">Tài khoản chính</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-2 flex items-center space-x-3">
+                <button id="btnStartStream" class="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white py-2.5 rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <span>Bắt đầu Treo Stream 24/7 (Headless)</span>
+                </button>
+                <button id="btnStopStream" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#da373c] hover:bg-[#c02e33] text-white px-5 py-2.5 rounded-lg font-bold text-xs shadow-md transition-all">
+                  Dừng Stream
+                </button>
+              </div>
+            </div>
+
+            <!-- Right Col: Live Stream Status & Badges -->
+            <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4 flex flex-col justify-between">
+              <div class="space-y-4">
+                <h3 class="text-xs font-bold text-white uppercase tracking-wider">📊 Trạng Thái Trực Tuyến</h3>
+
+                <div class="bg-[#1e1f22] p-4 rounded-xl border border-[#3f4147] text-center">
+                  <div class="text-xs text-[#949ba4]">Thời gian đã stream liên tục:</div>
+                  <div id="streamTimer" class="text-3xl font-black text-emerald-400 font-mono tracking-wider mt-1">00:00:00</div>
+                  <div id="streamLoopInfo" class="text-[11px] text-[#949ba4] mt-1 font-mono">Gói RTP Video: 0 loops</div>
+                </div>
+
+                <div class="space-y-2 text-xs">
+                  <div class="flex items-center justify-between p-2 rounded-lg bg-[#1e1f22] border border-[#383a40]">
+                    <span class="text-[#949ba4]">Streamer (Chính):</span>
+                    <span id="streamerStatusIndicator" class="font-semibold text-gray-400 font-mono">Chưa kết nối</span>
+                  </div>
+                  <div class="flex items-center justify-between p-2 rounded-lg bg-[#1e1f22] border border-[#383a40]">
+                    <span class="text-[#949ba4]">Khán giả (Phụ):</span>
+                    <span id="viewerStatusIndicator" class="font-semibold text-gray-400 font-mono">Chưa vào phòng</span>
+                  </div>
+                  <div class="flex items-center justify-between p-2 rounded-lg bg-[#1e1f22] border border-[#383a40]">
+                    <span class="text-[#949ba4]">Kênh thoại:</span>
+                    <span id="streamChannelName" class="text-indigo-400 font-mono">Chưa chọn</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-[#2b2d31] p-3 rounded-lg border border-[#3f4147] text-[11px] text-[#949ba4] space-y-1">
+                <div class="font-bold text-white flex items-center space-x-1">
+                  <span>💡 Cột mốc huy hiệu Stream (🖥️):</span>
+                </div>
+                <div>• Đột phá: <strong>20 giờ</strong> (Đã mở khóa)</div>
+                <div>• Nổi bật: <strong>75 giờ</strong> (Còn 43h nữa)</div>
+                <div>• Người tạo xu hướng: <strong>150h</strong> | Tiêu điểm: <strong>300h</strong></div>
+                <div>• Ngôi sao: <strong>500h</strong> | Xuất thần: <strong>5.000+h</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtab 4: Quests -->
+        <div id="sub-quests" class="subtab-content hidden space-y-5">
+          <div class="flex items-center justify-between bg-[#313338] p-4 rounded-xl border border-[#3f4147]">
+            <div>
+              <h2 class="text-base font-bold text-white">Discord Quests Automator</h2>
+              <p class="text-xs text-[#949ba4]">Tự động ghi danh, cày 15 phút và nhận quà vào hòm đồ Discord.</p>
+            </div>
+            <button id="btnRefreshQuests" class="bg-[#232428] hover:bg-[#383a40] text-white px-3 py-1.5 rounded-lg border border-[#3f4147] text-xs font-semibold">
+              ↻ Làm mới danh sách Quests
+            </button>
+          </div>
+          <div id="questsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 2: HỒ SƠ & RICH PRESENCE STUDIO -->
+      <!-- ========================================== -->
+      <div id="tab-presence" class="tab-content hidden p-6 space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Col 1: Fake Spotify Player -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center space-x-2 text-emerald-400 font-bold text-sm">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                <span>Giả Lập Spotify Player</span>
+              </div>
+              <p class="text-xs text-[#949ba4] mt-1">Hiển thị đang nghe nhạc trên Spotify kèm thời lượng thực tế mà không cần liên kết Spotify.</p>
+              <div class="space-y-2 mt-4 text-xs">
+                <div>
+                  <label class="text-[#949ba4]">Tên bài hát:</label>
+                  <input type="text" id="spotifySong" value="Starboy" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+                </div>
+                <div>
+                  <label class="text-[#949ba4]">Ca sĩ / Nghệ sĩ:</label>
+                  <input type="text" id="spotifyArtist" value="The Weeknd" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+                </div>
+                <div>
+                  <label class="text-[#949ba4]">Album:</label>
+                  <input type="text" id="spotifyAlbum" value="Starboy" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+                </div>
+                <div>
+                  <label class="text-[#949ba4]">Thời lượng (giây):</label>
+                  <input type="number" id="spotifyDuration" value="230" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2 pt-3">
+              <button id="btnSetSpotify" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold transition-all">Bật Spotify</button>
+              <button id="btnClearSpotify" class="bg-[#313338] text-[#949ba4] hover:text-white px-3 py-2 rounded-lg text-xs font-semibold border border-[#3f4147]">Tắt</button>
+            </div>
+          </div>
+
+          <!-- Col 2: Fake Twitch Streaming -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center space-x-2 text-purple-400 font-bold text-sm">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.149 0l-1.612 4.119v16.8h5.9v3.081h3.224l3.223-3.081h4.839l6.277-6.277v-14.642h-21.851zm19.699 13.567l-3.762 3.763h-5.374l-3.224 3.082v-3.082h-4.301v-15.17h16.661v11.407zm-10.748-7.525h2.15v6.44h-2.15v-6.44zm6.448 0h2.15v6.44h-2.15v-6.44z"/></svg>
+                <span>Fake Twitch Streaming (Tím)</span>
+              </div>
+              <p class="text-xs text-[#949ba4] mt-1">Đổi trạng thái hồ sơ sang màu tím Streaming mộng mơ cùng link phát sóng.</p>
+              <div class="space-y-2 mt-4 text-xs">
+                <div>
+                  <label class="text-[#949ba4]">Tiêu đề buổi phát sóng:</label>
+                  <input type="text" id="streamTitle" value="Chilling & Coding Pro Tool" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+                </div>
+                <div>
+                  <label class="text-[#949ba4]">Link Twitch Stream:</label>
+                  <input type="text" id="streamUrl" value="https://twitch.tv/discord" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2 pt-3">
+              <button id="btnSetStreaming" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-xs font-bold transition-all">Bật Streaming</button>
+              <button id="btnClearStreaming" class="bg-[#313338] text-[#949ba4] hover:text-white px-3 py-2 rounded-lg text-xs font-semibold border border-[#3f4147]">Tắt</button>
+            </div>
+          </div>
+
+          <!-- Col 3: HypeSquad 1-Click Switcher -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center space-x-2 text-indigo-400 font-bold text-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                <span>Đổi Huy Hiệu HypeSquad 1-Click</span>
+              </div>
+              <p class="text-xs text-[#949ba4] mt-1">Chuyển đổi ngay lập tức 1 trong 3 nhà HypeSquad trên huy hiệu hồ sơ của bạn mà không cần làm trắc nghiệm.</p>
+              <div class="grid grid-cols-1 gap-2 mt-4 text-xs font-bold">
+                <button class="btn-hypesquad bg-purple-900/40 hover:bg-purple-800/60 border border-purple-500/40 text-purple-300 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all" data-house="1">
+                  <span>⚔️ Nhà Bravery (Dũng Cảm - Tím)</span>
+                </button>
+                <button class="btn-hypesquad bg-amber-900/40 hover:bg-amber-800/60 border border-amber-500/40 text-amber-300 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all" data-house="2">
+                  <span>💡 Nhà Brilliance (Sáng Chói - Cam)</span>
+                </button>
+                <button class="btn-hypesquad bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-500/40 text-cyan-300 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all" data-house="3">
+                  <span>⚖️ Nhà Balance (Cân Bằng - Xanh Lam)</span>
+                </button>
+              </div>
+            </div>
+            <button class="btn-hypesquad bg-[#313338] hover:bg-rose-900/30 text-rose-400 py-2 rounded-lg text-xs font-semibold border border-[#3f4147]" data-house="0">
+              Rời khỏi HypeSquad
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: Custom Presence with Clickable Buttons & Profile Quick Editor -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Custom Game Presence with Buttons -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-3">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <span>Custom Game Presence + 2 Nút Bấm Clickable</span>
+            </h3>
+            <p class="text-xs text-[#949ba4]">Tạo trạng thái đang chơi game với 2 nút bấm có thể click chuyển hướng link.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <input type="text" id="customPresName" value="Visual Studio Code" placeholder="Tên Game / App" class="bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+              <input type="text" id="customPresDetails" value="Developing Advanced Systems" placeholder="Chi tiết (Details)" class="bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+              <input type="text" id="customPresBtn1Label" value="My Website" placeholder="Nút 1: Nhãn" class="bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+              <input type="text" id="customPresBtn1Url" value="https://google.com" placeholder="Nút 1: Link URL" class="bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+              <input type="text" id="customPresBtn2Label" value="Contact Me" placeholder="Nút 2: Nhãn" class="bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+              <input type="text" id="customPresBtn2Url" value="https://discord.com" placeholder="Nút 2: Link URL" class="bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+            </div>
+            <button id="btnSetCustomPresence" class="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white py-2 rounded-lg text-xs font-bold transition-all">
+              Kích hoạt Custom Presence có nút bấm
+            </button>
+          </div>
+
+          <!-- Profile Quick Editor -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-3">
+            <h3 class="text-sm font-bold text-white">Chỉnh sửa hồ sơ nhanh (Bio / Display Name)</h3>
+            <div class="space-y-2 text-xs">
+              <div>
+                <label class="text-[#949ba4]">Tên hiển thị (Display Name):</label>
+                <input type="text" id="profileGlobalName" placeholder="Tên hiển thị mới..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white">
+              </div>
+              <div>
+                <label class="text-[#949ba4]">Tiểu sử (About Me / Bio):</label>
+                <textarea id="profileBio" rows="2" placeholder="Nhập bio mới..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white"></textarea>
+              </div>
+              <button id="btnSaveProfile" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold transition-all">
+                Lưu Thay Đổi Hồ Sơ
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 3: XÓA TIN NHẮN & AUTO-RESPONDER -->
+      <!-- ========================================== -->
+      <div id="tab-chat" class="tab-content hidden p-6 space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Ghost Message Purger -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+            <div class="flex items-center space-x-2 text-rose-400 font-bold text-sm">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              <span>Ghost Message Purger (Xóa sạch tin nhắn của tôi)</span>
+            </div>
+            <p class="text-xs text-[#949ba4]">
+              Tự động quét ngược lịch sử kênh chat (DM hoặc Kênh Server) và **xóa sạch toàn bộ tin nhắn do bạn đã từng gửi**.
+            </p>
+            <div class="space-y-3 text-xs">
+              <div>
+                <label class="block text-[#949ba4] mb-1">Channel ID hoặc DM ID:</label>
+                <input type="text" id="purgeChannelId" placeholder="Dán Channel ID (chuỗi 18-19 số)" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-2 text-white font-mono">
+              </div>
+              <div>
+                <label class="block text-[#949ba4] mb-1">Độ trễ an toàn giữa các tin (ms):</label>
+                <input type="number" id="purgeDelayMs" value="1200" min="600" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white font-mono">
+              </div>
+              <div class="bg-[#1e1f22] p-3 rounded-lg border border-[#3f4147] flex items-center justify-between font-mono">
+                <span>Đã quét: <strong id="purgeScannedCount" class="text-white">0</strong></span>
+                <span>Đã xóa: <strong id="purgeDeletedCount" class="text-rose-400 font-bold">0</strong></span>
+              </div>
+              <div class="flex items-center space-x-2 pt-2">
+                <button id="btnStartPurge" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2 rounded-lg font-bold transition-all">Bắt đầu xóa tin nhắn</button>
+                <button id="btnStopPurge" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#313338] text-white px-4 py-2 rounded-lg font-semibold border border-[#3f4147]">Dừng</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Personal AFK Auto-Responder -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2 text-indigo-400 font-bold text-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                <span>AFK Auto-Responder (Trả lời tự động)</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="autoResponderToggle" class="sr-only peer">
+                <div class="w-11 h-6 bg-[#3f4147] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#23a55a]"></div>
+              </label>
+            </div>
+            <p class="text-xs text-[#949ba4]">Tự động gửi tin nhắn phản hồi khi ai đó gửi tin nhắn riêng (DM) lúc bạn đang AFK hoặc bận.</p>
+            <div class="space-y-3 text-xs">
+              <div>
+                <label class="text-[#949ba4]">Nội dung tin nhắn tự động:</label>
+                <textarea id="autoResponderMessage" rows="3" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded p-2.5 text-white mt-1">Xin chào! Hiện tại mình đang AFK/bận và sẽ phản hồi bạn ngay khi online.</textarea>
+              </div>
+              <div>
+                <label class="text-[#949ba4]">Thời gian hồi mỗi người (Cooldown phút):</label>
+                <input type="number" id="autoResponderCooldown" value="15" min="1" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded px-3 py-1.5 text-white mt-1">
+              </div>
+              <button id="btnSaveAutoResponder" class="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white py-2 rounded-lg font-bold transition-all">
+                Lưu Cấu Hình Auto-Responder
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 4: QUẢN LÝ BẠN BÈ (FRIENDS) -->
+      <!-- ========================================== -->
+      <div id="tab-friends" class="tab-content hidden p-6 space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#313338] p-4 rounded-xl border border-[#3f4147]">
+          <div>
+            <h2 class="text-base font-bold text-white">Quản Lý Bạn Bè & Lời Mời Kết Bạn</h2>
+            <p class="text-xs text-[#949ba4]">Lọc danh sách bạn bè, hủy kết bạn hàng loạt hoặc xóa lời mời gửi đi bị treo.</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button id="btnRefreshFriends" class="bg-[#232428] hover:bg-[#383a40] text-white px-3 py-1.5 rounded-lg border border-[#3f4147] text-xs font-semibold">↻ Quét danh sách</button>
+            <button id="btnBatchUnfriend" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all">Gỡ các mục đã chọn</button>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2 text-xs border-b border-[#383a40] pb-2">
+          <button class="friend-filter-btn active px-3 py-1 rounded bg-[#5865f2] text-white font-bold" data-filter="1">Bạn Bè</button>
+          <button class="friend-filter-btn px-3 py-1 rounded text-[#949ba4] hover:text-white" data-filter="4">Lời Mời Đã Gửi (Outgoing)</button>
+          <button class="friend-filter-btn px-3 py-1 rounded text-[#949ba4] hover:text-white" data-filter="3">Lời Mời Đến (Incoming)</button>
+          <button class="friend-filter-btn px-3 py-1 rounded text-[#949ba4] hover:text-white" data-filter="2">Đã Chặn (Blocked)</button>
+        </div>
+
+        <div class="bg-[#242629] rounded-xl border border-[#383a40] overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="text-[#949ba4] border-b border-[#383a40] bg-[#1e1f22]">
+              <tr>
+                <th class="p-3 w-10"><input type="checkbox" id="selectAllFriends"></th>
+                <th class="p-3">Người Dùng</th>
+                <th class="p-3">User ID</th>
+                <th class="p-3">Loại Quan Hệ</th>
+              </tr>
+            </thead>
+            <tbody id="friendsTableBody" class="divide-y divide-[#313338]">
+              <tr><td colspan="4" class="p-6 text-center text-[#949ba4]">Nhấn "Quét danh sách" để tải danh sách bạn bè.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 5: QUẢN LÝ SERVER (GUILD CLEANER) -->
+      <!-- ========================================== -->
+      <div id="tab-servers" class="tab-content hidden p-6 space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#313338] p-4 rounded-xl border border-[#3f4147]">
+          <div>
+            <h2 class="text-base font-bold text-white">Quản Lý & Dọn Dẹp Server (Guilds)</h2>
+            <p class="text-xs text-[#949ba4]">Rời hàng loạt server rác, server quảng cáo không còn hoạt động.</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button id="btnRefreshServers" class="bg-[#232428] hover:bg-[#383a40] text-white px-3 py-1.5 rounded-lg border border-[#3f4147] text-xs font-semibold">↻ Quét Server</button>
+            <button id="btnBatchLeaveServers" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all">Rời Server Đã Chọn</button>
+          </div>
+        </div>
+
+        <div class="bg-[#242629] rounded-xl border border-[#383a40] overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="text-[#949ba4] border-b border-[#383a40] bg-[#1e1f22]">
+              <tr>
+                <th class="p-3 w-10"><input type="checkbox" id="selectAllServers"></th>
+                <th class="p-3">Tên Server</th>
+                <th class="p-3">Server ID</th>
+                <th class="p-3">Vai Trò</th>
+              </tr>
+            </thead>
+            <tbody id="serversTableBody" class="divide-y divide-[#313338]">
+              <tr><td colspan="4" class="p-6 text-center text-[#949ba4]">Nhấn "Quét Server" để tải danh sách các server bạn đã tham gia.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 6: BẢO MẬT & ĐA TÀI KHOẢN (SECURITY & VAULT) -->
+      <!-- ========================================== -->
+      <div id="tab-security" class="tab-content hidden p-6 space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Multi-Account Vault -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                <span>Kho Đa Tài Khoản (Account Vault)</span>
+              </h3>
+              <button onclick="window.discordApp?.openTokenModal()" class="bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs px-3 py-1 rounded-lg font-bold">+ Thêm Tài Khoản</button>
+            </div>
+            <p class="text-xs text-[#949ba4]">Chuyển đổi tức thì giữa các tài khoản Discord mà không cần nhập lại mã 2FA hay đăng xuất.</p>
+            <div id="vaultAccountsList" class="space-y-2 max-h-56 overflow-y-auto"></div>
+          </div>
+
+          <!-- Authorized OAuth2 Apps Cleaner -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                <span>Ứng Dụng Đã Cấp Quyền (OAuth2 Tokens)</span>
+              </h3>
+              <button id="btnRefreshOAuth" class="bg-[#313338] text-xs px-2.5 py-1 rounded border border-[#3f4147]">↻ Quét Apps</button>
+            </div>
+            <p class="text-xs text-[#949ba4]">Quét và hủy cấp quyền ngay lập tức cho các con Bot độc hại có quyền tự thêm bạn vào server.</p>
+            <div id="oauthTokensList" class="space-y-2 max-h-56 overflow-y-auto">
+              <div class="text-center py-6 text-xs text-[#949ba4]">Nhấn "Quét Apps" để kiểm tra các ứng dụng được cấp quyền.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Sessions / Devices Inspector -->
+        <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              <span>Thiết Bị & Phiên Đăng Nhập Đang Hoạt Động (Active Sessions)</span>
+            </h3>
+            <button id="btnRefreshSessions" class="bg-[#313338] text-xs px-2.5 py-1 rounded border border-[#3f4147]">↻ Quét Thiết Bị</button>
+          </div>
+          <div id="activeSessionsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="col-span-full text-center py-6 text-xs text-[#949ba4]">Nhấn "Quét Thiết Bị" để kiểm tra các phiên đăng nhập.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVE REVERSE-ENGINEERING CONSOLE / TERMINAL (BOTTOM) -->
+    <div class="bg-[#242629] rounded-2xl border border-[#383a40] overflow-hidden shadow-xl flex flex-col">
+      <!-- Terminal Header -->
+      <div class="bg-[#1e1f22] px-4 py-3 border-b border-[#383a40] flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="flex items-center space-x-1.5">
+            <span class="w-3 h-3 rounded-full bg-[#f23f43]"></span>
+            <span class="w-3 h-3 rounded-full bg-[#f0b232]"></span>
+            <span class="w-3 h-3 rounded-full bg-[#23a55a]"></span>
+          </div>
+          <span class="text-xs font-bold text-white uppercase tracking-wider font-mono">Live Suite Console & Event Stream</span>
+          <span id="logCounterBadge" class="text-xs font-mono bg-[#313338] text-[#949ba4] px-2 py-0.5 rounded">0 events</span>
+        </div>
+
+        <div class="flex items-center space-x-2 text-xs">
+          <button id="btnAutoScroll" class="bg-[#2b2d31] hover:bg-[#383a40] text-emerald-400 px-2.5 py-1 rounded-lg border border-[#3f4147] font-mono">
+            Auto-scroll: ON
+          </button>
+          <button id="btnClearLogs" class="bg-[#2b2d31] hover:bg-[#383a40] text-[#949ba4] hover:text-white px-2.5 py-1 rounded-lg border border-[#3f4147]">
+            Xóa màn hình
+          </button>
+        </div>
+      </div>
+
+      <!-- Terminal Output Box -->
+      <div id="terminalOutput" class="terminal-window p-4 h-56 overflow-y-auto space-y-1 divide-y divide-white/[0.03]">
+        <div class="text-[#949ba4] text-xs font-mono py-1">[HỆ THỐNG] Discord Mission Control Suite v3.0 sẵn sàng.</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- USER TOKEN MODAL -->
+  <div id="tokenModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop hidden">
+    <div class="bg-[#2b2d31] rounded-2xl border border-[#383a40] max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-[#383a40] pb-3">
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2">
+          <svg class="w-5 h-5 text-[#5865f2]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+          <span>Thêm & Quản Lý Discord Token</span>
+        </h3>
+        <button id="btnCloseTokenModal" class="text-[#949ba4] hover:text-white p-1 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-white uppercase tracking-wider mb-1">Tên gợi nhớ (Label):</label>
+          <input type="text" id="inputAccountLabel" placeholder="Ví dụ: Acc Chính, Clone 1, Gaming..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#5865f2]">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-white uppercase tracking-wider mb-1">Discord User Token:</label>
+          <div class="relative">
+            <input type="password" id="inputUserToken" placeholder="Dán token của bạn vào đây..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#5865f2] font-mono">
+            <button type="button" id="btnToggleTokenVisibility" class="absolute right-3 top-2.5 text-[#949ba4] hover:text-white text-xs px-2 py-0.5 rounded">Hiện</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tokenModalAlert" class="hidden text-xs p-3 rounded-xl border font-mono"></div>
+
+      <div class="flex items-center justify-end space-x-3 pt-2">
+        <button id="btnCancelTokenModal" class="px-4 py-2 text-xs text-[#949ba4] hover:text-white font-medium">Hủy bỏ</button>
+        <button id="btnSubmitToken" class="bg-[#5865f2] hover:bg-[#4752c4] text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center space-x-2">
+          <span>Xác thực & Thêm vào Vault</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Scripts -->
+  <script src="/js/app.js"></script>
+</body>
+</html>

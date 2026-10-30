@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Sensitive Account Data & Vault Tokens (CRITICAL FOR PUBLIC REPOS)
+data/accounts.json
+
+# Cache and generated media files
+data/detectables_cache.json
+data/stream_idle.mp4
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,32 @@
+{
+  "name": "discord-activity-automator",
+  "version": "2.5.0",
+  "description": "Discord Activity Badges & Quests Automation Web Dashboard with Reverse-Engineered Science Telemetry",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "discord",
+    "reverse-engineering",
+    "activity-badges",
+    "discord-quests",
+    "telemetry",
+    "science-api"
+  ],
+  "author": "Antigravity Reverse-Engineering Team",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.21.0",
+    "cors": "^2.8.6",
+    "discord-stream-client": "^1.4.8",
+    "discord.js-selfbot-v13": "^3.7.1",
+    "express": "^5.3.0",
+    "ffmpeg-static": "^5.3.0",
+    "tweetnacl": "^1.0.3",
+    "uuid": "^14.0.3",
+    "ws": "^8.22.0"
+  }
+}
