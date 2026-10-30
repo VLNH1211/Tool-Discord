@@ -463,58 +463,58 @@ class App {
       const phoneDisplay = acc.phone || 'Chưa liên kết SĐT';
 
       return `
-        <div class="bg-[#242629] rounded-2xl border ${acc.isActive ? 'border-[#5865f2] shadow-lg shadow-indigo-500/10' : 'border-[#383a40]'} overflow-hidden flex flex-col justify-between transition-all hover:border-[#5865f2]/50">
-          <!-- Card Header & Banner -->
-          <div class="h-16 bg-gradient-to-r ${acc.isActive ? 'from-indigo-600 via-indigo-500 to-purple-600' : 'from-[#1e1f22] to-[#2b2d31]'} p-3 flex items-start justify-between relative">
-            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${acc.isActive ? 'bg-emerald-500 text-white font-mono shadow' : 'bg-black/40 text-gray-300 font-mono'}">
-              ${acc.isActive ? '👑 TÀI KHOẢN CHÍNH' : '👤 TÀI KHOẢN PHỤ (CLONE)'}
+        <div class="bg-[#242629] rounded-2xl border ${acc.isActive ? 'border-[#5865f2] shadow-xl shadow-indigo-500/10' : 'border-[#383a40]'} overflow-hidden flex flex-col justify-between transition-all hover:border-[#5865f2]/60">
+          <!-- Banner Header -->
+          <div class="h-20 bg-gradient-to-r ${acc.isActive ? 'from-indigo-600 via-indigo-500 to-purple-600' : 'from-[#2c2d31] via-[#35373d] to-[#40434a]'} px-4 py-3 flex items-start justify-between relative">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm flex items-center space-x-1 ${acc.isActive ? 'bg-emerald-500 text-white font-mono' : 'bg-black/50 text-indigo-200 font-mono'}">
+              <span>${acc.isActive ? '👑 TÀI KHOẢN CHÍNH' : '👤 TÀI KHOẢN PHỤ (CLONE)'}</span>
             </span>
-            <button class="btn-del-account bg-black/30 hover:bg-rose-600/80 text-gray-300 hover:text-white p-1 rounded-lg transition-colors cursor-pointer" data-id="${acc.id}" title="Xóa tài khoản khỏi danh sách">
+            <button class="btn-del-account bg-black/40 hover:bg-rose-600/80 text-gray-300 hover:text-white p-1.5 rounded-lg transition-colors cursor-pointer" data-id="${acc.id}" title="Xóa tài khoản khỏi danh sách">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
           </div>
 
-          <!-- Avatar & Identity Info -->
-          <div class="px-5 pb-5 pt-0 -mt-8 space-y-4">
-            <div class="flex items-end justify-between">
+          <!-- Profile Body -->
+          <div class="px-5 pb-5 pt-0 space-y-4">
+            <!-- Avatar & ID Badge Row -->
+            <div class="flex items-center justify-between -mt-10">
               <div class="relative">
-                <img src="${avatarUrl}" class="w-16 h-16 rounded-2xl border-4 border-[#242629] object-cover shadow-md bg-[#1e1f22]">
-                <span class="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full border-2 border-[#242629] ${acc.isActive ? 'bg-emerald-500' : 'bg-gray-500'}"></span>
+                <img src="${avatarUrl}" class="w-18 h-18 rounded-2xl border-4 border-[#242629] object-cover shadow-xl bg-[#1e1f22]">
+                <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-[#242629] ${acc.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500'}"></span>
               </div>
-              <div class="text-right">
-                <span class="text-[11px] text-[#949ba4] font-mono block">Discord ID:</span>
+              <div class="bg-[#1e1f22] border border-[#3f4147] px-3 py-1.5 rounded-xl text-right shadow-sm">
+                <span class="text-[10px] text-[#949ba4] font-mono block uppercase">Discord ID</span>
                 <span class="text-xs font-mono text-white font-bold tracking-tight">${acc.userId || 'N/A'}</span>
               </div>
             </div>
 
+            <!-- Identity info -->
             <div>
-              <div class="flex items-center space-x-1.5">
-                <h3 class="text-base font-black text-white truncate">${this.escapeHtml(acc.global_name || acc.username)}</h3>
-              </div>
-              <div class="text-xs text-indigo-400 font-mono">@${this.escapeHtml(acc.username)}</div>
+              <h3 class="text-lg font-black text-white truncate">${this.escapeHtml(acc.global_name || acc.username)}</h3>
+              <div class="text-xs text-indigo-400 font-mono font-bold">@${this.escapeHtml(acc.username)}</div>
             </div>
 
-            <!-- Email & Verification Badge -->
-            <div class="space-y-1.5 text-[11px] pt-1 border-t border-[#383a40]">
+            <!-- Email, Verified & Phone Block -->
+            <div class="space-y-2 text-xs pt-2 border-t border-[#383a40]">
               <div class="flex items-center justify-between">
                 <span class="text-[#949ba4]">Hộp thư Email:</span>
-                <span class="font-mono text-white max-w-[170px] truncate" title="${this.escapeHtml(emailDisplay)}">${this.escapeHtml(emailDisplay)}</span>
+                <span class="font-mono text-white text-xs truncate max-w-[210px]" title="${this.escapeHtml(emailDisplay)}">${this.escapeHtml(emailDisplay)}</span>
               </div>
               
               <div>
                 ${isVerified 
-                  ? `<div class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center space-x-1.5 font-medium">
-                      <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
-                      <span>Email đã xác thực (Mở đầy đủ tính năng)</span>
+                  ? `<div class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-xl flex items-center space-x-1.5 font-medium text-xs">
+                      <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                      <span>Email đã xác thực (Sẵn sàng 100%)</span>
                     </div>` 
-                  : `<div class="bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-start space-x-1.5">
-                      <svg class="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                  : `<div class="bg-amber-500/10 text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-xl flex items-start space-x-1.5 text-xs">
+                      <svg class="w-4 h-4 shrink-0 mt-0.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
                       <span>Vui lòng vào Gmail bấm xác thực để mở WebSocket Gateway!</span>
                     </div>`
                 }
               </div>
 
-              <div class="flex items-center justify-between text-[11px] pt-1">
+              <div class="flex items-center justify-between text-xs pt-0.5">
                 <span class="text-[#949ba4]">Số điện thoại:</span>
                 <span class="font-mono text-gray-300">${this.escapeHtml(phoneDisplay)}</span>
               </div>
@@ -523,21 +523,22 @@ class App {
             <!-- Card Actions -->
             <div class="pt-3 border-t border-[#383a40] space-y-2">
               ${!acc.isActive ? `
-                <button class="btn-card-switch w-full bg-[#5865f2] hover:bg-[#4752c4] text-white py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-1.5 cursor-pointer" data-id="${acc.id}">
+                <button class="btn-card-switch w-full bg-[#5865f2] hover:bg-[#4752c4] text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-1.5 cursor-pointer" data-id="${acc.id}">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                   <span>Kích hoạt làm Tài khoản chính</span>
                 </button>
               ` : `
-                <div class="w-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 py-1.5 rounded-xl text-xs font-bold text-center font-mono">
-                  ✓ ĐANG ĐIỀU KHIỂN CHÍNH
+                <div class="w-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 py-2 rounded-xl text-xs font-bold text-center font-mono flex items-center justify-center space-x-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>✓ ĐANG ĐIỀU KHIỂN CHÍNH</span>
                 </div>
               `}
               
               <div class="grid grid-cols-2 gap-2 text-xs">
-                <button class="btn-card-farm bg-[#1e1f22] hover:bg-[#383a40] text-indigo-300 hover:text-white py-1.5 px-2 rounded-lg border border-[#3f4147] transition-all font-semibold flex items-center justify-center space-x-1" data-id="${acc.id}">
+                <button class="btn-card-farm bg-[#1e1f22] hover:bg-[#383a40] text-indigo-300 hover:text-white py-2 px-2.5 rounded-xl border border-[#3f4147] transition-all font-semibold flex items-center justify-center space-x-1 cursor-pointer" data-id="${acc.id}">
                   <span>⏳ Cày 5000h</span>
                 </button>
-                <button class="btn-card-viewer bg-[#1e1f22] hover:bg-[#383a40] text-emerald-300 hover:text-white py-1.5 px-2 rounded-lg border border-[#3f4147] transition-all font-semibold flex items-center justify-center space-x-1" data-id="${acc.id}">
+                <button class="btn-card-viewer bg-[#1e1f22] hover:bg-[#383a40] text-emerald-300 hover:text-white py-2 px-2.5 rounded-xl border border-[#3f4147] transition-all font-semibold flex items-center justify-center space-x-1 cursor-pointer" data-id="${acc.id}">
                   <span>📺 Khán giả Stream</span>
                 </button>
               </div>

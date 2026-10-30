@@ -306,92 +306,100 @@
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label class="text-[#949ba4] font-medium block mb-1">
-                    Voice Channel ID (ID Kênh thoại) <span class="text-red-400">*</span>
-                  </label>
-                  <input type="text" id="streamChannelId" placeholder="Ví dụ: 1111898368931790892" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white font-mono focus:border-indigo-500 focus:outline-none">
-                  <span class="text-[10px] text-[#949ba4] mt-1 block">Bấm chuột phải vào Kênh thoại trên Discord -> Copy Channel ID</span>
+                  <div class="flex items-center justify-between mb-1">
+                    <label class="text-[#949ba4] font-medium">
+                      Voice Channel ID (ID Kênh thoại) <span class="text-red-400">*</span>
+                    </label>
+                    <button type="button" onclick="document.getElementById('streamChannelId').value = '1111898368931790892'" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-mono transition-all cursor-pointer">
+                      ⚡ Kênh "Sảnh" mặc định
+                    </button>
+                  </div>
+                  <input type="text" id="streamChannelId" value="1111898368931790892" placeholder="Ví dụ: 1111898368931790892" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-3 py-2 text-white font-mono focus:border-indigo-500 focus:outline-none">
+                  <span class="text-[10px] text-[#949ba4] mt-1 block">Server Hái Sao -> Chuột phải vào kênh thoại -> Copy Channel ID</span>
                 </div>
 
                 <div>
                   <label class="text-[#949ba4] font-medium block mb-1">
                     Tài khoản phụ (Khán giả / Viewer) <span class="text-emerald-400 font-normal">(Bắt buộc để tính giờ)</span>
                   </label>
-                  <select id="streamViewerAccountSelect" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white focus:border-indigo-500 focus:outline-none">
+                  <select id="streamViewerAccountSelect" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-3 py-2 text-white focus:border-indigo-500 focus:outline-none">
                     <option value="">-- Chọn từ Két tài khoản hoặc tự vào phòng --</option>
                   </select>
-                  <span class="text-[10px] text-[#949ba4] mt-1 block">Hoặc dán Token nick phụ vào ô bên dưới:</span>
-                  <input type="password" id="streamViewerTokenCustom" placeholder="Hoặc dán Token nick phụ tại đây..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-1.5 mt-1.5 text-white font-mono text-[11px] focus:border-indigo-500 focus:outline-none">
+                  <span class="text-[10px] text-[#949ba4] mt-1 block">Hoặc dán Token nick phụ vào ô bên dưới nếu chưa có trong Két:</span>
+                  <input type="password" id="streamViewerTokenCustom" placeholder="Hoặc dán Token nick phụ tại đây..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-3 py-1.5 mt-1.5 text-white font-mono text-[11px] focus:border-indigo-500 focus:outline-none">
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2 border-t border-[#383a40]">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-3 border-t border-[#383a40]">
                 <div>
                   <label class="text-[#949ba4] font-medium block mb-1">Chế độ kết nối:</label>
-                  <select id="streamConnectionMode" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white">
+                  <select id="streamConnectionMode" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-3 py-2 text-white focus:border-indigo-500 focus:outline-none">
                     <option value="cloud" selected>☁️ Chế độ Cloud 24/7 (Gateway Voice - Chạy 100% mượt trên Render)</option>
                     <option value="desktop">🖥️ Chế độ Desktop (WebRTC Video RTP FFmpeg)</option>
                   </select>
                 </div>
                 <div>
                   <label class="text-[#949ba4] font-medium block mb-1">Tài khoản Streamer:</label>
-                  <div class="bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white flex items-center justify-between">
-                    <span id="streamerActiveUserLabel" class="font-mono text-indigo-400">Đang lấy từ tài khoản chính...</span>
-                    <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">Tài khoản chính</span>
+                  <div class="bg-[#1e1f22] border border-[#3f4147] rounded-xl px-3 py-2 text-white flex items-center justify-between">
+                    <span id="streamerActiveUserLabel" class="font-mono text-indigo-400 truncate max-w-[180px]">Đang lấy từ tài khoản chính...</span>
+                    <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold">Chính</span>
                   </div>
                 </div>
               </div>
 
               <div class="pt-2 flex items-center space-x-3">
-                <button id="btnStartStream" class="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white py-2.5 rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2">
+                <button id="btnStartStream" class="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   <span>Bắt đầu Treo Stream 24/7 (Headless)</span>
                 </button>
-                <button id="btnStopStream" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#da373c] hover:bg-[#c02e33] text-white px-5 py-2.5 rounded-lg font-bold text-xs shadow-md transition-all">
-                  Dừng Stream
-                </button>
-              </div>
-            </div>
+                <button id="btnStopStream" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#da373c] hover:bg-[#c02e33] text-white px-5 py-3 rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer">
                   Dừng Stream
                 </button>
               </div>
             </div>
 
             <!-- Right Col: Live Stream Status & Badges -->
-            <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4 flex flex-col justify-between">
+            <div class="lg:col-span-1 bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4 flex flex-col justify-between">
               <div class="space-y-4">
-                <h3 class="text-xs font-bold text-white uppercase tracking-wider">📊 Trạng Thái Trực Tuyến</h3>
+                <div class="flex items-center justify-between">
+                  <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Trạng Thái Trực Tuyến</span>
+                  </h3>
+                  <span class="text-[10px] text-[#949ba4] font-mono">Render Cloud</span>
+                </div>
 
-                <div class="bg-[#1e1f22] p-4 rounded-xl border border-[#3f4147] text-center">
+                <div class="bg-[#1e1f22] p-4 rounded-xl border border-[#3f4147] text-center shadow-inner">
                   <div class="text-xs text-[#949ba4]">Thời gian đã stream liên tục:</div>
-                  <div id="streamTimer" class="text-3xl font-black text-emerald-400 font-mono tracking-wider mt-1">00:00:00</div>
-                  <div id="streamLoopInfo" class="text-[11px] text-[#949ba4] mt-1 font-mono">Gói RTP Video: 0 loops</div>
+                  <div id="streamTimer" class="text-3xl font-black text-emerald-400 font-mono tracking-wider mt-1 drop-shadow-sm">00:00:00</div>
+                  <div id="streamLoopInfo" class="text-[11px] text-[#949ba4] mt-1 font-mono">Chế độ: Cloud Gateway 24/7</div>
                 </div>
 
                 <div class="space-y-2 text-xs">
-                  <div class="flex items-center justify-between p-2 rounded-lg bg-[#1e1f22] border border-[#383a40]">
+                  <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#1e1f22] border border-[#383a40]">
                     <span class="text-[#949ba4]">Streamer (Chính):</span>
                     <span id="streamerStatusIndicator" class="font-semibold text-gray-400 font-mono">Chưa kết nối</span>
                   </div>
-                  <div class="flex items-center justify-between p-2 rounded-lg bg-[#1e1f22] border border-[#383a40]">
+                  <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#1e1f22] border border-[#383a40]">
                     <span class="text-[#949ba4]">Khán giả (Phụ):</span>
                     <span id="viewerStatusIndicator" class="font-semibold text-gray-400 font-mono">Chưa vào phòng</span>
                   </div>
-                  <div class="flex items-center justify-between p-2 rounded-lg bg-[#1e1f22] border border-[#383a40]">
+                  <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#1e1f22] border border-[#383a40]">
                     <span class="text-[#949ba4]">Kênh thoại:</span>
-                    <span id="streamChannelName" class="text-indigo-400 font-mono">Chưa chọn</span>
+                    <span id="streamChannelName" class="text-indigo-400 font-mono font-bold">Kênh "Sảnh"</span>
                   </div>
                 </div>
               </div>
 
-              <div class="bg-[#2b2d31] p-3 rounded-lg border border-[#3f4147] text-[11px] text-[#949ba4] space-y-1">
+              <div class="bg-[#1e1f22] p-3.5 rounded-xl border border-[#383a40] text-[11px] text-[#949ba4] space-y-1.5">
                 <div class="font-bold text-white flex items-center space-x-1">
                   <span>💡 Cột mốc huy hiệu Stream (🖥️):</span>
                 </div>
-                <div>• Đột phá: <strong>20 giờ</strong> (Đã mở khóa)</div>
-                <div>• Nổi bật: <strong>75 giờ</strong> (Còn 43h nữa)</div>
-                <div>• Người tạo xu hướng: <strong>150h</strong> | Tiêu điểm: <strong>300h</strong></div>
-                <div>• Ngôi sao: <strong>500h</strong> | Xuất thần: <strong>5.000+h</strong></div>
+                <div class="flex justify-between"><span>• Đột phá: <strong>20 giờ</strong></span> <span class="text-emerald-400 font-mono font-bold">✓ Đã đạt</span></div>
+                <div class="flex justify-between"><span>• Nổi bật: <strong>75 giờ</strong></span> <span class="text-amber-400 font-mono">Cần đạt</span></div>
+                <div class="flex justify-between"><span>• Người tạo xu hướng: <strong>150h</strong></span> <span class="text-gray-400 font-mono">Mục tiêu 3</span></div>
+                <div class="flex justify-between"><span>• Tiêu điểm / Ngôi sao: <strong>300h - 500h</strong></span> <span class="text-indigo-300 font-mono">Cao cấp</span></div>
+                <div class="flex justify-between border-t border-[#383a40] pt-1"><span>• Xuất thần: <strong>5.000+ giờ</strong></span> <span class="text-purple-400 font-mono font-bold">👑 Cực đại</span></div>
               </div>
             </div>
           </div>
