@@ -860,20 +860,25 @@ class TaskManager {
   }
 
   async _runUnifiedParallelFarm(videoItems, gameItems) {
-    // 1. Process Video Trailer Quests in parallel/fast
-    (async () => {
-      for (const vq of videoItems) {
-        if (this.questTask.shouldStop) break;
+    // 1. Process Video Trailer Quests concurrently with ultra-fast completion
+    if (videoItems.length > 0) {
+      Promise.allSettled(videoItems.map(async (vq) => {
+        if (this.questTask.shouldStop) return;
         try {
           this.addLog(`🎬 [Video Quest] Đang kích hoạt & xem trailer: "${vq.name}"...`, 'QUEST');
           await discordClient.enrollQuest(this.user.token, vq.id);
-          await new Promise(r => setTimeout(r, 400));
+          await new Promise(r => setTimeout(r, 200));
           await discordClient.sendQuestVideoProgress(this.user.token, vq.id, vq.targetSeconds);
           vq.elapsedSeconds = vq.targetSeconds;
           vq.completed = true;
           this.broadcastSSE('quest_status', this.getQuestStatus());
-          await new Promise(r => setTimeout(r, 600));
-          const claimRes = await discordClient.claimQuest(this.user.token, vq.id);
+
+          await new Promise(r => setTimeout(r, 400));
+          let claimRes = await discordClient.claimQuest(this.user.token, vq.id);
+          if (!claimRes.success) {
+            await new Promise(r => setTimeout(r, 800));
+            claimRes = await discordClient.claimQuest(this.user.token, vq.id);
+          }
           if (claimRes.success) {
             vq.claimed = true;
             this.addLog(`🏆 [Video Quest] Hoàn thành & nhận thưởng thành công cho "${vq.name}"!`, 'SUCCESS');
@@ -884,31 +889,35 @@ class TaskManager {
         } catch (e) {
           this.addLog(`⚠️ Lỗi video quest "${vq.name}": ${e.message}`, 'WARN');
         }
-      }
-    })();
+      }));
+    }
 
-    // 2. Enroll all game quests and start gateway presence
+    // 2. Fast enroll all game quests with small stagger (80ms)
+    await Promise.allSettled(gameItems.map(async (gq, idx) => {
+      if (this.questTask.shouldStop) return;
+      await new Promise(r => setTimeout(r, idx * 80));
+      try {
+        await discordClient.enrollQuest(this.user.token, gq.id);
+      } catch (e) {}
+    }));
+
     if (this.settings.enableGatewayPresence && gameItems[0]) {
       gateway.updatePresence(gameItems[0].gameName, gameItems[0].gameId);
     }
 
-    for (const gq of gameItems) {
-      if (this.questTask.shouldStop) break;
-      try {
-        await discordClient.enrollQuest(this.user.token, gq.id);
-      } catch (e) {}
-    }
-
-    // 3. Send initial heartbeats for game quests
-    for (const item of gameItems) {
-      if (this.questTask.shouldStop) break;
+    // 3. Send initial heartbeats staggered (100ms)
+    await Promise.allSettled(gameItems.map(async (item, idx) => {
+      if (this.questTask.shouldStop) return;
+      await new Promise(r => setTimeout(r, idx * 100));
       await this._sendSingleQuestItemHeartbeat(item, true, 15, false);
-      await new Promise(r => setTimeout(r, 150));
-    }
+    }));
+
     this.broadcastSSE('quest_status', this.getQuestStatus());
 
-    // 4. Timer loop ticking all game items together
+    // 4. Timer loop ticking all game items concurrently with jitter
     const intervalSec = 15;
+    let tickCount = 0;
+
     this.questTask.timer = setInterval(async () => {
       if (this.questTask.shouldStop) {
         clearInterval(this.questTask.timer);
@@ -920,22 +929,36 @@ class TaskManager {
       }
 
       this.questTask.elapsedSeconds += intervalSec;
+      tickCount++;
 
-      for (const item of gameItems) {
-        if (this.questTask.shouldStop) break;
-        if (item.completed) continue;
+      // Rotate Gateway Rich Presence every 8 ticks (~2 phút) to simulate real active diverse gameplay
+      if (this.settings.enableGatewayPresence && gameItems.length > 1 && tickCount % 8 === 0) {
+        const uncompleted = gameItems.filter(g => !g.completed);
+        if (uncompleted.length > 0) {
+          const nextGame = uncompleted[Math.floor(Math.random() * uncompleted.length)];
+          gateway.updatePresence(nextGame.gameName, nextGame.gameId);
+        }
+      }
 
-        item.elapsedSeconds += intervalSec;
+      // Concurrently dispatch heartbeats with small 80ms stagger
+      await Promise.allSettled(gameItems.map(async (item, idx) => {
+        if (this.questTask.shouldStop || item.completed) return;
+
+        item.elapsedSeconds = Math.min(item.targetSeconds, item.elapsedSeconds + intervalSec);
         const isFinished = item.elapsedSeconds >= item.targetSeconds;
 
+        await new Promise(r => setTimeout(r, idx * 80));
         await this._sendSingleQuestItemHeartbeat(item, false, intervalSec, isFinished);
-        await new Promise(r => setTimeout(r, 150));
 
         if (isFinished) {
           item.completed = true;
           this.addLog(`🎉 [Song Song] Nhiệm vụ "${item.name}" đã hoàn thành! Đang tự động nhận thưởng...`, 'SUCCESS');
           try {
-            const claimRes = await discordClient.claimQuest(this.user.token, item.id);
+            let claimRes = await discordClient.claimQuest(this.user.token, item.id);
+            if (!claimRes.success) {
+              await new Promise(r => setTimeout(r, 1000));
+              claimRes = await discordClient.claimQuest(this.user.token, item.id);
+            }
             if (claimRes.success) {
               item.claimed = true;
               this.addLog(`🏆 Nhận thưởng thành công cho "${item.name}"! Đã nạp vào tài khoản Discord.`, 'SUCCESS');
@@ -946,7 +969,7 @@ class TaskManager {
             this.addLog(`⚠️ Lỗi claim "${item.name}": ${e.message}`, 'WARN');
           }
         }
-      }
+      }));
 
       this.broadcastSSE('quest_status', this.getQuestStatus());
 
@@ -966,7 +989,6 @@ class TaskManager {
   }
 
   async _processParallelQuests(pendingQuests) {
-    // Replaced by _runUnifiedParallelFarm
     return;
   }
 
@@ -980,24 +1002,26 @@ class TaskManager {
       };
 
       if (this.user.token && this.user.analyticsToken) {
-        const scienceEvents = discordClient.createPlaytimeHeartbeatEvent(
-          gameObj,
-          item.sessionId,
-          item.sequence,
-          isInitial,
-          durationMs
-        );
-        await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, scienceEvents);
+        try {
+          const scienceEvents = discordClient.createPlaytimeHeartbeatEvent(
+            gameObj,
+            item.sessionId,
+            item.sequence,
+            isInitial,
+            durationMs
+          );
+          await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, scienceEvents);
+        } catch (sciErr) {}
       }
 
       if (this.user.token && item.id) {
-        await discordClient.sendQuestHeartbeat(this.user.token, item.id, 'heartbeat', isTerminal);
+        try {
+          await discordClient.sendQuestHeartbeat(this.user.token, item.id, 'heartbeat', isTerminal);
+        } catch (hbErr) {}
       }
 
       item.sequence++;
-    } catch (err) {
-      // Non-fatal per-item error
-    }
+    } catch (err) {}
   }
 
   async startQuestFarm({ questId, questName, applicationId, gameName, targetSeconds = 900, intervalSec = 15, userToken }) {

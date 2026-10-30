@@ -1795,7 +1795,10 @@ class App {
         if (timeProgress) {
           const currentM = Math.floor((status.elapsedSeconds || 0) / 60);
           const totalM = Math.ceil((status.targetSeconds || 900) / 60);
-          timeProgress.textContent = `Tiến độ: ${status.elapsedSeconds || 0}s / ${status.targetSeconds || 900}s (~${currentM}/${totalM} phút) - Siêu tốc hoàn thành cùng lúc!`;
+          const remainingSec = Math.max(0, (status.targetSeconds || 900) - (status.elapsedSeconds || 0));
+          const remM = Math.floor(remainingSec / 60);
+          const remS = remainingSec % 60;
+          timeProgress.textContent = `⏱️ Tiến độ: ${status.elapsedSeconds || 0}s / ${status.targetSeconds || 900}s (~${currentM}/${totalM} phút) • Còn lại: ~${remM}m ${remS}s • Tự nhận thưởng khi 100%`;
         }
         if (progressBar) {
           progressBar.style.width = `${status.percentage || 0}%`;
