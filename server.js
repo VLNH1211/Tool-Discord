@@ -444,10 +444,11 @@ app.get('/api/games', (req, res) => {
 
 // --- DISCORD QUESTS ---
 app.get('/api/quests', async (req, res) => {
-  if (!taskManager.user.token) {
+  const token = req.headers.authorization || taskManager.user.token;
+  if (!token) {
     return res.status(401).json({ success: false, message: 'Chưa đăng nhập Discord Token.' });
   }
-  const result = await discordClient.getQuests(taskManager.user.token);
+  const result = await discordClient.getQuests(token);
   res.json(result);
 });
 

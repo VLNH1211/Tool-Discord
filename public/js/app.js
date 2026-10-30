@@ -1497,14 +1497,24 @@ class App {
   // --- BADGES: QUESTS ---
   async loadQuests() {
     if (!this.token) return;
+  async loadQuests() {
     const grid = document.getElementById('questsGrid');
-    grid.innerHTML = `<div class="col-span-full text-center py-8 text-[#949ba4]"><div class="inline-block animate-spin h-6 w-6 border-b-2 border-amber-400 mb-2"></div><p>Đang quét Discord Quests...</p></div>`;
+    if (!grid) return;
+    grid.innerHTML = `<div class="col-span-full text-center py-8 text-[#949ba4]"><div class="inline-block animate-spin h-6 w-6 border-b-2 border-amber-400 mb-2"></div><p>Đang quét Discord Quests từ máy chủ...</p></div>`;
 
     try {
-      const res = await fetch('/api/quests');
-      const data = await res.json();
-      const quests = data.quests || [];
+      const headers = {};
+      if (this.token) headers['Authorization'] = this.token;
 
+      const res = await fetch('/api/quests', { headers });
+      const data = await res.json();
+
+      if (!data.success) {
+        grid.innerHTML = `<div class="col-span-full text-center py-8 text-rose-400">❌ ${this.escapeHtml(data.message || 'Lỗi tải danh sách Quests.')}</div>`;
+        return;
+      }
+
+      const quests = data.quests || [];
       if (quests.length === 0) {
         grid.innerHTML = `<div class="col-span-full text-center py-8 text-[#949ba4]">Hiện không có Quest nào khả dụng hoặc bạn đã hoàn thành hết!</div>`;
         return;
@@ -1514,28 +1524,46 @@ class App {
         const questName = q.config?.messages?.quest_name || q.config?.messages?.game_title || 'Discord Quest';
         const gameTitle = q.config?.messages?.game_title || q.config?.application?.name || 'Game';
         const appId = q.config?.application?.id || '';
-        const targetSeconds = q.config?.task_config?.tasks?.PLAY_ON_DESKTOP?.target || 900;
+        const taskObj = q.config?.task_config_v2?.tasks?.PLAY_ON_DESKTOP || q.config?.task_config?.tasks?.PLAY_ON_DESKTOP || Object.values(q.config?.task_config_v2?.tasks || q.config?.task_config?.tasks || {})[0];
+        const targetSeconds = taskObj?.target || 900;
         const targetMins = Math.round(targetSeconds / 60);
         const isCompleted = Boolean(q.user_status?.completed_at);
+        const isClaimed = Boolean(q.user_status?.claimed_at);
+
+        let actionButton = '';
+        if (isClaimed) {
+          actionButton = `<button disabled class="w-full bg-[#1e1f22] text-[#949ba4] py-2 rounded-xl text-xs font-semibold border border-[#3f4147] cursor-not-allowed">✅ Đã nhận thưởng</button>`;
+        } else if (isCompleted) {
+          actionButton = `<button class="btn-claim-quest w-full bg-emerald-500 hover:bg-emerald-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer" data-id="${q.id}">🎁 Bấm Nhận Thưởng Ngay</button>`;
+        } else {
+          actionButton = `<button class="btn-farm-quest w-full bg-amber-500 hover:bg-amber-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+            data-id="${q.id}" data-name="${this.escapeHtml(questName)}" data-appid="${appId}" data-gamename="${this.escapeHtml(gameTitle)}" data-target="${targetSeconds}">
+            <span>⚡ Tự Động Cày (${targetMins} phút)</span>
+          </button>`;
+        }
 
         return `
-          <div class="bg-[#242629] rounded-xl border border-[#383a40] p-4 flex flex-col justify-between space-y-3">
+          <div class="bg-[#242629] rounded-2xl border border-[#383a40] hover:border-amber-500/40 p-5 flex flex-col justify-between space-y-4 shadow-lg transition-all group">
             <div>
-              <div class="text-[10px] text-amber-400 font-mono font-bold">AppID: ${appId}</div>
-              <h3 class="text-sm font-bold text-white mt-1">${this.escapeHtml(questName)}</h3>
-              <p class="text-xs text-[#949ba4]">Game: <strong class="text-indigo-300">${this.escapeHtml(gameTitle)}</strong> (Chơi ${targetMins} phút)</p>
+              <div class="flex items-center justify-between text-[11px] mb-1">
+                <span class="text-amber-400 font-mono font-bold">AppID: ${appId || 'Web'}</span>
+                ${isCompleted ? '<span class="text-emerald-400 font-semibold">Hoàn thành 100%</span>' : '<span class="text-[#949ba4]">Chưa hoàn thành</span>'}
+              </div>
+              <h3 class="text-base font-bold text-white group-hover:text-amber-300 transition-colors">${this.escapeHtml(questName)}</h3>
+              <p class="text-xs text-[#949ba4] mt-1">Trò chơi: <strong class="text-indigo-300">${this.escapeHtml(gameTitle)}</strong></p>
             </div>
-            <button class="btn-farm-quest bg-amber-500 hover:bg-amber-600 text-black py-1.5 rounded-lg text-xs font-bold transition-all"
-              data-id="${q.id}" data-name="${this.escapeHtml(questName)}" data-appid="${appId}" data-gamename="${this.escapeHtml(gameTitle)}" data-target="${targetSeconds}">
-              ${isCompleted ? '🎁 Nhận Thưởng' : '⚡ Tự Động Cày 15m'}
-            </button>
+            ${actionButton}
           </div>
         `;
       }).join('');
 
+      // Wire Farm buttons
       grid.querySelectorAll('.btn-farm-quest').forEach(btn => {
         btn.addEventListener('click', async () => {
-          await fetch('/api/quests/start-farm', {
+          this.showToast(`🚀 Bắt đầu cày Quest: "${btn.dataset.name}"...`, 'info');
+          btn.disabled = true;
+          btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang chạy...</span>`;
+          const res = await fetch('/api/quests/start-farm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1546,11 +1574,37 @@ class App {
               targetSeconds: parseInt(btn.dataset.target) || 900
             })
           });
+          const result = await res.json();
+          if (!result.success) {
+            this.showToast(result.message || 'Lỗi cày quest', 'error');
+            btn.disabled = false;
+            btn.textContent = '⚡ Tự Động Cày';
+          }
+        });
+      });
+
+      // Wire Claim buttons
+      grid.querySelectorAll('.btn-claim-quest').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          this.showToast('🎁 Đang nhận phần thưởng Quest...', 'info');
+          const res = await fetch('/api/quests/claim', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questId: btn.dataset.id })
+          });
+          const result = await res.json();
+          if (result.success) {
+            this.showToast('🎉 Nhận thưởng thành công!', 'success');
+            this.loadQuests();
+          } else {
+            this.showToast(`Lỗi nhận thưởng: ${result.message}`, 'error');
+          }
         });
       });
     } catch (e) {
       grid.innerHTML = `<div class="col-span-full text-center py-6 text-rose-400">Lỗi tải Quests: ${e.message}</div>`;
     }
+  }
   }
 
   updateQuestRunningUI(status) {}

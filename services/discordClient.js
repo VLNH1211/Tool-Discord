@@ -222,13 +222,24 @@ class DiscordClient {
     return events;
   }
 
+  getCleanBrowserHeaders(userToken) {
+    let cleanToken = (userToken || '').trim().replace(/^['"]|['"]$/g, '').replace(/^(Authorization:|Bearer|Bot)\s+/i, '').trim();
+    return {
+      'Authorization': cleanToken,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8',
+      'Content-Type': 'application/json'
+    };
+  }
+
   /**
    * Fetch Active Quests for the user
    */
   async getQuests(userToken) {
     try {
       const response = await axios.get(`${DISCORD_API_BASE}/quests/@me`, {
-        headers: this.getHeaders(userToken),
+        headers: this.getCleanBrowserHeaders(userToken),
         timeout: 10000
       });
 
@@ -249,11 +260,14 @@ class DiscordClient {
    * Enroll user into a Discord Quest
    */
   async enrollQuest(userToken, questId) {
+    const headers = this.getCleanBrowserHeaders(userToken);
     try {
-      const response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/enroll`, {}, {
-        headers: this.getHeaders(userToken),
-        timeout: 10000
-      });
+      let response;
+      try {
+        response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/accept`, {}, { headers, timeout: 10000 });
+      } catch (e1) {
+        response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/enroll`, {}, { headers, timeout: 10000 });
+      }
 
       return {
         success: true,
