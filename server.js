@@ -165,25 +165,41 @@ app.post('/api/accounts/sync-all', async (req, res) => {
 });
 
 app.post('/api/accounts/switch', async (req, res) => {
-  const { accountId } = req.body;
-  const acc = accountVault.setActiveAccount(accountId);
+  const { accountId, token } = req.body;
+  let acc = accountVault.getAccountById(accountId) || accountVault.accounts.find(a => a.userId === accountId);
+  
+  if (!acc && token) {
+    const cleanToken = String(token).trim();
+    const check = await discordClient.getCurrentUser(cleanToken);
+    if (check.success) {
+      acc = accountVault.addOrUpdateAccount(cleanToken, check.data, check.data.username, true);
+    }
+  } else if (acc) {
+    acc = accountVault.setActiveAccount(acc.id);
+  }
+
   if (!acc) {
     return res.status(404).json({ success: false, message: 'Không tìm thấy tài khoản!' });
   }
 
+  const effectiveToken = acc.token || token;
+  if (!effectiveToken) {
+    return res.status(400).json({ success: false, message: 'Tài khoản không có Token.' });
+  }
+
   taskManager.addLog(`Đang chuyển sang tài khoản @${acc.username}...`, 'INFO');
-  const result = await discordClient.getCurrentUser(acc.token);
+  const result = await discordClient.getCurrentUser(effectiveToken);
   if (!result.success) {
     return res.status(400).json({ success: false, message: 'Token của tài khoản này đã hết hạn.' });
   }
 
   const profile = result.data;
-  taskManager.setUser(acc.token, profile.analytics_token, profile);
+  taskManager.setUser(effectiveToken, profile.analytics_token, profile);
   taskManager.addLog(`Đã chuyển đổi sang tài khoản @${profile.username} thành công!`, 'SUCCESS');
 
   res.json({
     success: true,
-    profile: { ...profile, token: acc.token },
+    profile: { ...profile, token: effectiveToken },
     accounts: accountVault.getAccounts()
   });
 });
@@ -480,7 +496,7 @@ app.post('/api/quests/start-farm', async (req, res) => {
 
 app.post('/api/quests/start-farm-all', async (req, res) => {
   try {
-    const token = req.headers.authorization || taskManager.user.token;
+    const token = req.headers.authorization || req.body?.userToken || taskManager.user.token;
     if (!token) {
       return res.status(401).json({ success: false, message: 'Chưa đăng nhập Discord Token.' });
     }

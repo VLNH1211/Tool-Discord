@@ -261,12 +261,13 @@ class DiscordClient {
    */
   async enrollQuest(userToken, questId) {
     const headers = this.getCleanBrowserHeaders(userToken);
+    const body = { location: 11, is_targeted: false, metadata_raw: null };
     try {
       let response;
       try {
-        response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/accept`, {}, { headers, timeout: 10000 });
+        response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/enroll`, body, { headers, timeout: 10000 });
       } catch (e1) {
-        response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/enroll`, {}, { headers, timeout: 10000 });
+        response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/accept`, body, { headers, timeout: 10000 });
       }
 
       return {
@@ -310,10 +311,36 @@ class DiscordClient {
   /**
    * Send heartbeat to Discord Quest endpoint
    */
-  async sendQuestHeartbeat(userToken, questId, streamKey = 'heartbeat') {
+  async sendQuestHeartbeat(userToken, questId, streamKey = 'heartbeat', terminal = false) {
     try {
       const response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/heartbeat`, {
-        stream_key: streamKey
+        stream_key: streamKey,
+        terminal: Boolean(terminal)
+      }, {
+        headers: this.getCleanBrowserHeaders(userToken),
+        timeout: 10000
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message,
+        status: error.response?.status
+      };
+    }
+  }
+
+  /**
+   * Send video progress for Video-based Quests (e.g. trailer quests)
+   */
+  async sendQuestVideoProgress(userToken, questId, timestamp = 30) {
+    try {
+      const response = await axios.post(`${DISCORD_API_BASE}/quests/${questId}/video-progress`, {
+        timestamp: parseFloat(timestamp)
       }, {
         headers: this.getCleanBrowserHeaders(userToken),
         timeout: 10000

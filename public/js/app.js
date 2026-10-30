@@ -249,26 +249,34 @@ class App {
 
   async switchAccount(accountId) {
     try {
+      // Find account token from permanent vault if possible
+      const localAccounts = this.getPermanentAccounts();
+      const localAcc = localAccounts.find(a => a.id === accountId || a.userId === accountId);
+      const token = localAcc?.token || this.getStoredToken(accountId);
+
       const res = await fetch('/api/accounts/switch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId })
+        body: JSON.stringify({ accountId, token })
       });
       const data = await res.json();
       if (data.success) {
         this.user = data.profile;
-        this.token = data.profile.token || this.token;
+        const activeToken = data.profile.token || token || this.token;
+        this.token = activeToken;
+        localStorage.setItem('discord_user_token', activeToken);
         this.renderUserProfile(data.profile);
         if (data.accounts) {
           this.accounts = data.accounts;
           this.renderAccountsVault();
         }
-        alert(`Đã chuyển sang tài khoản @${data.profile.username}!`);
+        this.showToast(`Đã chuyển sang tài khoản @${data.profile.username}!`, 'success');
+        await this.loadQuests();
       } else {
-        alert(data.message);
+        this.showToast(data.message || 'Lỗi chuyển tài khoản.', 'error');
       }
     } catch (e) {
-      alert(`Lỗi chuyển tài khoản: ${e.message}`);
+      this.showToast(`Lỗi chuyển tài khoản: ${e.message}`, 'error');
     }
   }
 
@@ -1570,8 +1578,10 @@ class App {
       const questName = q.config?.messages?.quest_name || q.config?.messages?.game_title || 'Discord Quest';
       const gameTitle = q.config?.messages?.game_title || q.config?.application?.name || 'Game';
       const appId = q.config?.application?.id || '';
-      const taskObj = q.config?.task_config_v2?.tasks?.PLAY_ON_DESKTOP || q.config?.task_config?.tasks?.PLAY_ON_DESKTOP || Object.values(q.config?.task_config_v2?.tasks || q.config?.task_config?.tasks || {})[0];
-      const targetSeconds = taskObj?.target || 900;
+      const tasksObj = q.config?.task_config_v2?.tasks || q.config?.task_config?.tasks || {};
+      const isVideo = Boolean(tasksObj.WATCH_VIDEO);
+      const taskObj = tasksObj.WATCH_VIDEO || tasksObj.PLAY_ON_DESKTOP || Object.values(tasksObj)[0];
+      const targetSeconds = taskObj?.target || (isVideo ? 30 : 900);
       const targetMins = Math.round(targetSeconds / 60);
       const isCompleted = Boolean(q.user_status?.completed_at);
       const isClaimed = Boolean(q.user_status?.claimed_at);
@@ -1585,6 +1595,11 @@ class App {
         actionButton = `<button class="btn-claim-quest w-full bg-emerald-500 hover:bg-emerald-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer" data-id="${q.id}">🎁 Bấm Nhận Thưởng Ngay</button>`;
       } else if (isExpired) {
         actionButton = `<button disabled class="w-full bg-[#1e1f22] text-stone-500 py-2 rounded-xl text-xs font-semibold border border-[#3f4147] cursor-not-allowed">⏳ Đã hết hạn chiến dịch</button>`;
+      } else if (isVideo) {
+        actionButton = `<button class="btn-farm-quest w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+          data-id="${q.id}" data-name="${this.escapeHtml(questName)}" data-appid="${appId}" data-gamename="${this.escapeHtml(gameTitle)}" data-target="${targetSeconds}">
+          <span>🎬 Xem Trailer (${targetSeconds}s & Nhận Quà)</span>
+        </button>`;
       } else {
         actionButton = `<button class="btn-farm-quest w-full bg-amber-500 hover:bg-amber-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
           data-id="${q.id}" data-name="${this.escapeHtml(questName)}" data-appid="${appId}" data-gamename="${this.escapeHtml(gameTitle)}" data-target="${targetSeconds}">
@@ -1592,12 +1607,20 @@ class App {
         </button>`;
       }
 
+      const statusBadge = isCompleted 
+        ? '<span class="text-emerald-400 font-semibold">Hoàn thành 100%</span>' 
+        : (isExpired 
+          ? '<span class="text-stone-500 font-semibold">Đã kết thúc</span>' 
+          : (isVideo 
+            ? '<span class="text-indigo-400 font-semibold">🎬 Trailer 30s</span>' 
+            : '<span class="text-amber-300 font-semibold">🎮 Đang mở</span>'));
+
       return `
-        <div class="bg-[#242629] rounded-2xl border ${isExpired ? 'border-[#2f3136] opacity-60' : 'border-[#383a40] hover:border-amber-500/40'} p-5 flex flex-col justify-between space-y-4 shadow-lg transition-all group">
+        <div class="bg-[#242629] rounded-2xl border ${isExpired ? 'border-[#2f3136] opacity-60' : (isVideo ? 'border-indigo-500/30 hover:border-indigo-500/60' : 'border-[#383a40] hover:border-amber-500/40')} p-5 flex flex-col justify-between space-y-4 shadow-lg transition-all group">
           <div>
             <div class="flex items-center justify-between text-[11px] mb-1">
-              <span class="text-amber-400 font-mono font-bold">AppID: ${appId || 'Web'}</span>
-              ${isCompleted ? '<span class="text-emerald-400 font-semibold">Hoàn thành 100%</span>' : (isExpired ? '<span class="text-stone-500 font-semibold">Đã kết thúc</span>' : '<span class="text-amber-300 font-semibold">Đang mở</span>')}
+              <span class="${isVideo ? 'text-indigo-400' : 'text-amber-400'} font-mono font-bold">AppID: ${appId || 'Web/Trailer'}</span>
+              ${statusBadge}
             </div>
             <h3 class="text-base font-bold text-white group-hover:text-amber-300 transition-colors">${this.escapeHtml(questName)}</h3>
             <p class="text-xs text-[#949ba4] mt-1">Trò chơi: <strong class="text-indigo-300">${this.escapeHtml(gameTitle)}</strong></p>
@@ -1722,15 +1745,17 @@ class App {
           progressBar.style.width = `${status.percentage || 0}%`;
         }
       } else if (status.status === 'completed') {
-        banner.classList.remove('hidden');
-        if (titleEl) {
-          titleEl.textContent = (status.queueTotal === 0)
-            ? '🎉 Tất cả nhiệm vụ Discord Quests hiện có đã hoàn thành 100%!'
-            : '🏆🎉 ĐÃ HOÀN THÀNH TẤT CẢ NHIỆM VỤ SONG SONG & TỰ ĐỘNG NHẬN THƯỞNG!';
+        if (status.queueTotal > 0) {
+          banner.classList.remove('hidden');
+          if (titleEl) {
+            titleEl.textContent = '🏆🎉 ĐÃ HOÀN THÀNH TẤT CẢ NHIỆM VỤ SONG SONG & TỰ ĐỘNG NHẬN THƯỞNG!';
+          }
+          if (countBadge) countBadge.textContent = `100% Hoàn tất`;
+          if (timeProgress) timeProgress.textContent = 'Toàn bộ phần thưởng (Orbs, Avatar...) đã được nạp vào tài khoản Discord!';
+          if (progressBar) progressBar.style.width = '100%';
+        } else {
+          banner.classList.add('hidden');
         }
-        if (countBadge) countBadge.textContent = `100% Hoàn tất`;
-        if (timeProgress) timeProgress.textContent = 'Toàn bộ phần thưởng (Orbs, Avatar...) đã được nạp vào tài khoản Discord!';
-        if (progressBar) progressBar.style.width = '100%';
         if (btnAuto) {
           btnAuto.disabled = false;
           btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -1779,9 +1804,6 @@ class App {
         } else {
           btn.disabled = false;
           btn.classList.remove('opacity-40', 'cursor-not-allowed');
-          const targetMins = Math.round((parseInt(btn.dataset.target) || 900) / 60);
-          btn.className = 'btn-farm-quest w-full bg-amber-500 hover:bg-amber-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5';
-          btn.innerHTML = `<span>⚡ Tự Động Cày (${targetMins} phút)</span>`;
         }
       });
     }
@@ -1807,7 +1829,8 @@ class App {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': this.token
-        }
+        },
+        body: JSON.stringify({ userToken: this.token })
       });
       const data = await res.json();
       if (!data.success) {
@@ -1818,7 +1841,7 @@ class App {
           btnAuto.innerHTML = `<span>⚡ Cày Song Song Tất Cả Quests (Cùng Lúc)</span>`;
         }
       } else if (data.total === 0) {
-        this.showToast('🎉 Tuyệt vời! Bạn đã hoàn thành 100% tất cả các nhiệm vụ Discord Quests!', 'success');
+        this.showToast(data.message || 'Tài khoản hiện tại không có nhiệm vụ nào cần cày.', 'info');
         if (btnAuto) {
           btnAuto.disabled = false;
           btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -1826,7 +1849,10 @@ class App {
         }
         await this.loadQuests();
       } else {
-        this.showToast(data.message || `Đang chạy song song ${data.total || ''} nhiệm vụ!`, 'success');
+        const msg = data.videoTotal 
+          ? `🔥 Đang chạy song song ${data.total} nhiệm vụ game (đã nhận ${data.videoTotal} nhiệm vụ video trailer)!` 
+          : (data.message || `Đang chạy song song ${data.total} nhiệm vụ!`);
+        this.showToast(msg, 'success');
       }
     } catch (e) {
       this.showToast(`Lỗi: ${e.message}`, 'error');

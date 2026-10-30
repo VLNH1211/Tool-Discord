@@ -724,11 +724,16 @@ class TaskManager {
       throw new Error('Chưa đăng nhập Discord Token!');
     }
 
-    if (!this.user.analyticsToken) {
-      const uRes = await discordClient.getCurrentUser(this.user.token);
-      if (uRes.success && uRes.data?.analytics_token) {
-        this.user.analyticsToken = uRes.data.analytics_token;
-      }
+    // Always fetch fresh profile & analytics token for current user token
+    const uRes = await discordClient.getCurrentUser(this.user.token);
+    if (!uRes.success) {
+      this.questTask.status = 'idle';
+      this.broadcastSSE('quest_status', this.getQuestStatus());
+      throw new Error(`Token không hợp lệ hoặc đã hết hạn: ${uRes.message || '401 Unauthorized'}`);
+    }
+    this.user.profile = uRes.data;
+    if (uRes.data?.analytics_token) {
+      this.user.analyticsToken = uRes.data.analytics_token;
     }
 
     if (this.questTask.status === 'running') {
@@ -746,7 +751,7 @@ class TaskManager {
     this.questTask.activeQuests = [];
     this.broadcastSSE('quest_status', this.getQuestStatus());
 
-    this.addLog(`🔍 Đang quét danh sách Discord Quests để cày song song tất cả...`, 'QUEST');
+    this.addLog(`🔍 Đang quét danh sách Discord Quests cho @${this.user.profile.username}...`, 'QUEST');
     const questRes = await discordClient.getQuests(this.user.token);
     if (!questRes.success) {
       this.questTask.status = 'idle';
@@ -776,18 +781,78 @@ class TaskManager {
     });
 
     if (pendingQuests.length === 0) {
-      this.questTask.status = 'completed';
-      this.addLog(`🎉 Tuyệt vời! Bạn không còn nhiệm vụ Discord Quests nào cần cày. Tất cả đã hoàn thành!`, 'SUCCESS');
+      this.questTask.status = 'idle';
+      this.addLog(`ℹ️ Tài khoản @${this.user.profile.username} hiện không còn nhiệm vụ nào cần cày (tất cả đã hoàn thành hoặc hết hạn).`, 'INFO');
       this.broadcastSSE('quest_status', this.getQuestStatus());
-      return { success: true, message: 'Tất cả nhiệm vụ đã hoàn thành!', total: 0 };
+      return { 
+        success: true, 
+        message: `Tài khoản @${this.user.profile.username} hiện không còn nhiệm vụ nào cần cày (tất cả đã hoàn thành hoặc hết hạn).`, 
+        total: 0 
+      };
     }
 
-    this.addLog(`🚀 KÍCH HOẠT CHẾ ĐỘ CÀY SONG SONG ${pendingQuests.length} NHIỆM VỤ CÙNG LÚC!`, 'QUEST');
+    // Split into Video Trailer Quests and Play Desktop Quests
+    const videoQuests = [];
+    const gameQuests = [];
 
-    // Run parallel queue in background
-    this._processParallelQuests(pendingQuests);
+    for (const q of pendingQuests) {
+      const tasksObj = q.config?.task_config_v2?.tasks || q.config?.task_config?.tasks || {};
+      if (tasksObj.WATCH_VIDEO) {
+        videoQuests.push(q);
+      } else {
+        gameQuests.push(q);
+      }
+    }
 
-    return { success: true, total: pendingQuests.length };
+    this.addLog(
+      `📋 Phân loại nhiệm vụ: ${videoQuests.length} Video Trailer (nhận ngay) | ${gameQuests.length} Chơi Game (cày song song 15 phút).`,
+      'QUEST'
+    );
+
+    // 1. Process Video Trailer Quests immediately (instant fulfill & claim)
+    for (const vq of videoQuests) {
+      if (this.questTask.shouldStop) break;
+      const qTitle = vq.config?.messages?.quest_name || vq.config?.messages?.game_title || 'Video Quest';
+      const targetSec = vq.config?.task_config_v2?.tasks?.WATCH_VIDEO?.target || 
+                        vq.config?.task_config?.tasks?.WATCH_VIDEO?.target || 30;
+      this.addLog(`🎬 [Video Quest] Đang kích hoạt & xem trailer: "${qTitle}"...`, 'QUEST');
+      try {
+        await discordClient.enrollQuest(this.user.token, vq.id);
+        await new Promise(r => setTimeout(r, 400));
+        await discordClient.sendQuestVideoProgress(this.user.token, vq.id, targetSec);
+        await new Promise(r => setTimeout(r, 600));
+        const claimRes = await discordClient.claimQuest(this.user.token, vq.id);
+        if (claimRes.success) {
+          this.addLog(`🏆 [Video Quest] Hoàn thành & đã nhận thưởng cho "${qTitle}"!`, 'SUCCESS');
+        } else {
+          this.addLog(`ℹ️ [Video Quest] Đã gửi xem video "${qTitle}". (${claimRes.message || 'Kiểm tra hòm đồ'})`, 'INFO');
+        }
+      } catch (err) {
+        this.addLog(`⚠️ Lỗi video quest "${qTitle}": ${err.message}`, 'WARN');
+      }
+    }
+
+    // 2. Process Game Quests in parallel
+    if (gameQuests.length > 0) {
+      this.addLog(`🚀 KÍCH HOẠT CÀY SONG SONG ĐỒNG THỜI ${gameQuests.length} NHIỆM VỤ GAME!`, 'QUEST');
+      this._processParallelQuests(gameQuests);
+      return { 
+        success: true, 
+        total: gameQuests.length, 
+        videoTotal: videoQuests.length,
+        message: `Đang cày song song ${gameQuests.length} nhiệm vụ game (đã xử lý ${videoQuests.length} video quest)!`
+      };
+    } else {
+      this.questTask.status = 'completed';
+      this.addLog(`🏆🎉 TẤT CẢ ${videoQuests.length} NHIỆM VỤ VIDEO ĐÃ ĐƯỢC HOÀN THÀNH VÀ NHẬN THƯỞNG!`, 'SUCCESS');
+      this.broadcastSSE('quest_status', this.getQuestStatus());
+      return { 
+        success: true, 
+        total: videoQuests.length, 
+        videoTotal: videoQuests.length,
+        message: `Đã hoàn thành và nhận thưởng ${videoQuests.length} nhiệm vụ video trailer!` 
+      };
+    }
   }
 
   async _processParallelQuests(pendingQuests) {
@@ -852,7 +917,7 @@ class TaskManager {
     // Send initial heartbeats
     for (const item of activeQuests) {
       if (this.questTask.shouldStop) break;
-      await this._sendSingleQuestItemHeartbeat(item, true, 15);
+      await this._sendSingleQuestItemHeartbeat(item, true, 15, false);
       await new Promise(r => setTimeout(r, 200));
     }
     this.broadcastSSE('quest_status', this.getQuestStatus());
@@ -875,12 +940,13 @@ class TaskManager {
         if (item.completed) continue;
 
         item.elapsedSeconds += intervalSec;
+        const isFinished = item.elapsedSeconds >= item.targetSeconds;
 
-        // Send heartbeat
-        await this._sendSingleQuestItemHeartbeat(item, false, intervalSec);
+        // Send heartbeat (with terminal flag when finished)
+        await this._sendSingleQuestItemHeartbeat(item, false, intervalSec, isFinished);
         await new Promise(r => setTimeout(r, 200));
 
-        if (item.elapsedSeconds >= item.targetSeconds) {
+        if (isFinished) {
           item.completed = true;
           this.addLog(`🎉 [Song Song] Nhiệm vụ "${item.name}" đã hoàn thành! Đang tự động nhận thưởng...`, 'SUCCESS');
           try {
@@ -914,7 +980,7 @@ class TaskManager {
     }, intervalSec * 1000);
   }
 
-  async _sendSingleQuestItemHeartbeat(item, isInitial = false, intervalSec = 15) {
+  async _sendSingleQuestItemHeartbeat(item, isInitial = false, intervalSec = 15, isTerminal = false) {
     try {
       const durationMs = intervalSec * 1000;
       const gameObj = {
@@ -935,7 +1001,7 @@ class TaskManager {
       }
 
       if (this.user.token && item.id) {
-        await discordClient.sendQuestHeartbeat(this.user.token, item.id);
+        await discordClient.sendQuestHeartbeat(this.user.token, item.id, 'heartbeat', isTerminal);
       }
 
       item.sequence++;
