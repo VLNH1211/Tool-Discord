@@ -111,6 +111,31 @@ app.get('/api/accounts', (req, res) => {
   res.json({ success: true, accounts: accountVault.getAccounts() });
 });
 
+app.post('/api/accounts/add', async (req, res) => {
+  try {
+    const { token, label } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'Vui lòng cung cấp Discord User Token.' });
+    }
+    let cleanToken = String(token).trim().replace(/^['"]|['"]$/g, '').replace(/^(Authorization:|Bearer|Bot)\s+/i, '').trim();
+    const result = await discordClient.getCurrentUser(cleanToken);
+    if (!result.success) {
+      return res.status(result.status || 400).json(result);
+    }
+    const profile = result.data;
+    const savedAccount = accountVault.addOrUpdateAccount(cleanToken, profile, label || 'Tài khoản phụ', false);
+    taskManager.addLog(`Đã thêm tài khoản phụ @${profile.username} vào Vault.`, 'SUCCESS');
+    taskManager.broadcastEvent('accounts_update', accountVault.getAccounts());
+    res.json({
+      success: true,
+      account: savedAccount,
+      accounts: accountVault.getAccounts()
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 app.post('/api/accounts/switch', async (req, res) => {
   const { accountId } = req.body;
   const acc = accountVault.setActiveAccount(accountId);

@@ -59,7 +59,7 @@ class AccountVault {
     return this.accounts.find(a => a.id === this.activeAccountId);
   }
 
-  addOrUpdateAccount(token, profile, label = 'Tài khoản chính') {
+  addOrUpdateAccount(token, profile, label = 'Tài khoản chính', makeActive = true) {
     const cleanToken = (token || '').trim().replace(/^['"]|['"]$/g, '').replace(/^(Authorization:|Bearer|Bot)\s+/i, '').trim();
     const existingIndex = this.accounts.findIndex(a => a.userId === profile.id || a.token === cleanToken);
 
@@ -72,11 +72,15 @@ class AccountVault {
       avatar: profile.avatar,
       label: label || profile.username,
       addedAt: new Date().toISOString(),
-      isActive: true
+      isActive: makeActive ? true : (existingIndex >= 0 ? this.accounts[existingIndex].isActive : false)
     };
 
-    // Mark others inactive
-    this.accounts.forEach(a => { a.isActive = false; });
+    if (makeActive) {
+      // Mark others inactive
+      this.accounts.forEach(a => { a.isActive = false; });
+      accountObj.isActive = true;
+      this.activeAccountId = accountObj.id;
+    }
 
     if (existingIndex >= 0) {
       this.accounts[existingIndex] = accountObj;
@@ -84,7 +88,11 @@ class AccountVault {
       this.accounts.push(accountObj);
     }
 
-    this.activeAccountId = accountObj.id;
+    if (!this.activeAccountId && this.accounts.length > 0) {
+      this.activeAccountId = this.accounts[0].id;
+      this.accounts[0].isActive = true;
+    }
+
     this.save();
     return accountObj;
   }

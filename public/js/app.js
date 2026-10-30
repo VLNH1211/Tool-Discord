@@ -107,6 +107,11 @@ class App {
       this.updateStreamUI(JSON.parse(e.data));
     });
 
+    this.eventSource.addEventListener('accounts_update', (e) => {
+      this.accounts = JSON.parse(e.data);
+      this.renderAccountsVault();
+    });
+
     this.eventSource.addEventListener('user_update', (e) => {
       const data = JSON.parse(e.data);
       this.renderUserProfile(data.user);
