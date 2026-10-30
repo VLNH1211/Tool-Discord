@@ -1678,12 +1678,12 @@ class App {
         btnAuto.classList.add('opacity-50', 'cursor-not-allowed');
         btnAuto.innerHTML = `
           <span class="inline-block animate-spin mr-1.5">↻</span>
-          <span>Đang Cày Tự Động...</span>
+          <span>Đang Cày Song Song...</span>
         `;
       } else {
         btnAuto.disabled = false;
         btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
-        btnAuto.innerHTML = `<span>⚡ Cày Tự Động Tất Cả Quests</span>`;
+        btnAuto.innerHTML = `<span>⚡ Cày Song Song Tất Cả Quests (Cùng Lúc)</span>`;
       }
     }
 
@@ -1694,38 +1694,44 @@ class App {
     if (banner) {
       if (isRunning) {
         banner.classList.remove('hidden');
+        const activeList = status.activeQuests || [];
+        const runningItems = activeList.filter(q => !q.completed);
+        const doneItems = activeList.filter(q => q.completed);
+
         if (titleEl) {
-          titleEl.textContent = status.questName ? `Đang cày: ${status.questName}` : 'Đang cày nhiệm vụ...';
+          if (status.mode === 'parallel' && activeList.length > 0) {
+            titleEl.textContent = `🚀 Đang cày song song ${runningItems.length}/${activeList.length} nhiệm vụ cùng lúc!`;
+          } else {
+            titleEl.textContent = status.questName ? `Đang cày: ${status.questName}` : 'Đang cày nhiệm vụ...';
+          }
         }
         if (countBadge) {
-          if (status.mode === 'all' && status.queueTotal > 0) {
-            countBadge.classList.remove('hidden');
-            countBadge.textContent = `Nhiệm vụ ${status.queueIndex || 1} / ${status.queueTotal}`;
+          countBadge.classList.remove('hidden');
+          if (status.mode === 'parallel' && activeList.length > 0) {
+            countBadge.textContent = `⚡ Song Song: ${doneItems.length} xong / ${activeList.length} Quests`;
           } else {
-            countBadge.classList.add('hidden');
+            countBadge.textContent = `Nhiệm vụ ${status.queueIndex || 1} / ${status.queueTotal || 1}`;
           }
         }
         if (timeProgress) {
           const currentM = Math.floor((status.elapsedSeconds || 0) / 60);
           const totalM = Math.ceil((status.targetSeconds || 900) / 60);
-          timeProgress.textContent = `Tiến độ: ${status.elapsedSeconds || 0}s / ${status.targetSeconds || 900}s (~${currentM}/${totalM} phút) - Game: ${status.gameName || 'Discord'}`;
+          timeProgress.textContent = `Tiến độ: ${status.elapsedSeconds || 0}s / ${status.targetSeconds || 900}s (~${currentM}/${totalM} phút) - Siêu tốc hoàn thành cùng lúc!`;
         }
         if (progressBar) {
           progressBar.style.width = `${status.percentage || 0}%`;
         }
       } else if (status.status === 'completed') {
         banner.classList.remove('hidden');
-        if (titleEl) titleEl.textContent = '🎉 Đã hoàn thành nhiệm vụ & tự động nhận thưởng!';
-        if (countBadge && status.queueTotal > 0) {
-          countBadge.textContent = `${status.queueTotal} / ${status.queueTotal} Quests`;
-        }
-        if (timeProgress) timeProgress.textContent = 'Toàn bộ phần thưởng đã được nhận thành công!';
+        if (titleEl) titleEl.textContent = '🏆🎉 ĐÃ HOÀN THÀNH TẤT CẢ NHIỆM VỤ SONG SONG & TỰ ĐỘNG NHẬN THƯỞNG!';
+        if (countBadge) countBadge.textContent = `100% Hoàn thành`;
+        if (timeProgress) timeProgress.textContent = 'Toàn bộ phần thưởng (Orbs, Avatar...) đã được nạp vào tài khoản Discord!';
         if (progressBar) progressBar.style.width = '100%';
         setTimeout(() => this.loadQuests(), 3000);
       } else if (status.status === 'stopped') {
         banner.classList.remove('hidden');
         if (titleEl) titleEl.textContent = '⏹ Đã dừng tiến trình cày Quests';
-        if (timeProgress) timeProgress.textContent = 'Đã tạm dừng. Bấm "⚡ Cày Tự Động Tất Cả Quests" để tiếp tục.';
+        if (timeProgress) timeProgress.textContent = 'Đã tạm dừng. Bấm "⚡ Cày Song Song Tất Cả Quests" để tiếp tục.';
         if (progressBar) progressBar.style.width = '0%';
       } else {
         banner.classList.add('hidden');
@@ -1735,9 +1741,25 @@ class App {
     // Update individual buttons in grid
     const grid = document.getElementById('questsGrid');
     if (grid) {
+      const activeMap = new Map();
+      if (status.activeQuests && status.activeQuests.length > 0) {
+        status.activeQuests.forEach(q => activeMap.set(q.id, q));
+      }
+
       grid.querySelectorAll('.btn-farm-quest').forEach(btn => {
+        const questId = btn.dataset.id;
         if (isRunning) {
-          if (btn.dataset.id === status.questId) {
+          if (status.mode === 'parallel' && activeMap.has(questId)) {
+            const item = activeMap.get(questId);
+            btn.disabled = true;
+            if (item.completed) {
+              btn.className = 'btn-farm-quest w-full bg-emerald-500 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-1';
+              btn.innerHTML = `<span>✅ Hoàn thành & Đã Claim</span>`;
+            } else {
+              btn.className = 'btn-farm-quest w-full bg-gradient-to-r from-amber-500 to-orange-500 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-wait flex items-center justify-center space-x-1.5 animate-pulse';
+              btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang cày song song (${item.percentage}%)</span>`;
+            }
+          } else if (questId === status.questId) {
             btn.disabled = true;
             btn.className = 'btn-farm-quest w-full bg-amber-600 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-wait flex items-center justify-center space-x-1.5';
             btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang cày (${status.percentage || 0}%)</span>`;
@@ -1769,7 +1791,7 @@ class App {
       btnAuto.innerHTML = `<span class="inline-block animate-spin mr-1.5">↻</span><span>Đang khởi động...</span>`;
     }
 
-    this.showToast('🚀 Đang quét & khởi động chuỗi cày tự động tất cả Discord Quests...', 'info');
+    this.showToast('🚀 Đang quét & kích hoạt cày song song tất cả Discord Quests...', 'info');
     try {
       const res = await fetch('/api/quests/start-farm-all', {
         method: 'POST',
@@ -1784,17 +1806,17 @@ class App {
         if (btnAuto) {
           btnAuto.disabled = false;
           btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
-          btnAuto.innerHTML = `<span>⚡ Cày Tự Động Tất Cả Quests</span>`;
+          btnAuto.innerHTML = `<span>⚡ Cày Song Song Tất Cả Quests (Cùng Lúc)</span>`;
         }
       } else {
-        this.showToast(data.message || `Đang chạy hàng đợi ${data.total || ''} nhiệm vụ!`, 'success');
+        this.showToast(data.message || `Đang chạy song song ${data.total || ''} nhiệm vụ!`, 'success');
       }
     } catch (e) {
       this.showToast(`Lỗi: ${e.message}`, 'error');
       if (btnAuto) {
         btnAuto.disabled = false;
         btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
-        btnAuto.innerHTML = `<span>⚡ Cày Tự Động Tất Cả Quests</span>`;
+        btnAuto.innerHTML = `<span>⚡ Cày Song Song Tất Cả Quests (Cùng Lúc)</span>`;
       }
     }
   }
