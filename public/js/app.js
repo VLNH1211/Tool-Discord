@@ -1496,8 +1496,6 @@ class App {
 
   // --- BADGES: QUESTS ---
   async loadQuests() {
-    if (!this.token) return;
-  async loadQuests() {
     const grid = document.getElementById('questsGrid');
     if (!grid) return;
     grid.innerHTML = `<div class="col-span-full text-center py-8 text-[#949ba4]"><div class="inline-block animate-spin h-6 w-6 border-b-2 border-amber-400 mb-2"></div><p>Đang quét Discord Quests từ máy chủ...</p></div>`;
@@ -1604,7 +1602,6 @@ class App {
     } catch (e) {
       grid.innerHTML = `<div class="col-span-full text-center py-6 text-rose-400">Lỗi tải Quests: ${e.message}</div>`;
     }
-  }
   }
 
   updateQuestRunningUI(status) {}
