@@ -179,7 +179,7 @@ class DiscordClient {
   /**
    * Build Playtime Continuous Heartbeat Event
    */
-  createPlaytimeHeartbeatEvent(game, sessionId, sequenceNumber, isInitial = false, durationMs = 60000) {
+  createPlaytimeHeartbeatEvent(game, sessionId, sequenceNumber, isInitial = false, durationMs = 60000, isFinal = false) {
     const now = Date.now();
     const gameId = String(game.id);
     const gameName = game.name;
@@ -212,7 +212,7 @@ class DiscordClient {
         game_executable: gameExecutable,
         game_detection_enabled: true,
         initial_heartbeat: isInitial,
-        final_heartbeat: false,
+        final_heartbeat: isFinal,
         duration_tracked_ms: durationMs,
         client_app_state: 'focused',
         client_send_timestamp: now

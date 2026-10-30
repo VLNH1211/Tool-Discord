@@ -509,6 +509,18 @@ app.post('/api/diversity/stop', (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/diversity/turbo-inject', async (req, res) => {
+  try {
+    const { targetCount } = req.body;
+    const result = await taskManager.turboInjectDiversity({
+      targetCount: parseInt(targetCount) || 100
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 // --- PLAYTIME HOURS BOOSTER ---
 app.post('/api/playtime/start', async (req, res) => {
   try {

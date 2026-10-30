@@ -533,7 +533,8 @@ class TaskManager {
     while (remaining > 0) {
       const batchHours = Math.min(remaining, chunkSize);
       const durationMs = batchHours * 3600 * 1000;
-      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, false, durationMs);
+      const isFinal = (remaining - batchHours <= 0);
+      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, false, durationMs, isFinal);
 
       const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, heartbeatEvents);
       if (res.success) {
@@ -563,6 +564,95 @@ class TaskManager {
       success: true,
       addedHours: totalSuccess,
       totalAccumulatedHours: (this.accumulatedPlaytimeSeconds / 3600).toFixed(1)
+    };
+  }
+
+  /**
+   * TURBO DIVERSITY INJECTOR: Bơm siêu tốc hàng trăm / hàng nghìn game khác nhau vào Discord Analytics
+   */
+  async turboInjectDiversity({ targetCount = 100 }) {
+    if (!this.user.token || !this.user.analyticsToken) {
+      throw new Error('Chưa đăng nhập Discord Token hoặc thiếu Analytics Token!');
+    }
+
+    const count = Math.min(Math.max(parseInt(targetCount) || 100, 1), 25000);
+    const pool = detectables.getRandomUniqueGames(count);
+    if (pool.length === 0) {
+      throw new Error('Không tải được danh sách trò chơi hợp lệ từ Discord detectables.');
+    }
+
+    this.diversityTask.status = 'running';
+    this.diversityTask.current = 0;
+    this.diversityTask.target = Math.min(count, pool.length);
+    this.diversityTask.successCount = 0;
+    this.diversityTask.errorCount = 0;
+    this.diversityTask.recentSpoofed = [];
+    this.diversityTask.shouldPause = false;
+    this.diversityTask.shouldStop = false;
+
+    this.addLog(`⚡ [TURBO DIVERSITY] Bắt đầu kích hoạt gói bơm siêu tốc +${this.diversityTask.target.toLocaleString()} GAME để mở khóa Huy hiệu Thuyết Phổ Quát (Thần Thoại)...`, 'WARN');
+    this.broadcastSSE('diversity_status', this.getDiversityStatus());
+
+    // Execute background injection loop
+    (async () => {
+      const batchSize = 20;
+      for (let i = 0; i < pool.length; i += batchSize) {
+        if (this.diversityTask.shouldStop) break;
+
+        const chunk = pool.slice(i, i + batchSize);
+        let events = [];
+        for (const g of chunk) {
+          events.push(...discordClient.createGameDiversityEvents(g));
+        }
+
+        try {
+          const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, events);
+          if (res.success) {
+            this.diversityTask.successCount += chunk.length;
+            this.diversityTask.current = this.diversityTask.successCount;
+            for (const g of chunk) {
+              this.diversityTask.recentSpoofed.push({
+                index: this.diversityTask.recentSpoofed.length + 1,
+                name: g.name,
+                executable: g.executable,
+                id: g.id,
+                time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+              });
+            }
+            this.addLog(`⚡ [TURBO DIVERSITY] Đã nạp đợt +${chunk.length} game. Tiến trình: ${this.diversityTask.successCount} / ${this.diversityTask.target} games.`, 'SUCCESS');
+          } else {
+            if (res.status === 429) {
+              const waitSec = Math.ceil(res.retryAfter || 5);
+              this.addLog(`⚠️ Bị Discord Rate Limit (429)! Chờ ${waitSec} giây...`, 'WARN');
+              await new Promise(r => setTimeout(r, waitSec * 1000 + 1000));
+              i -= batchSize;
+              continue;
+            } else {
+              this.diversityTask.errorCount += chunk.length;
+              this.addLog(`❌ Lỗi nạp đợt game: ${res.message}`, 'ERROR');
+            }
+          }
+        } catch (err) {
+          this.diversityTask.errorCount += chunk.length;
+          this.addLog(`❌ Ngoại lệ khi nạp game: ${err.message}`, 'ERROR');
+        }
+
+        this.broadcastSSE('diversity_status', this.getDiversityStatus());
+
+        if (i + batchSize < pool.length) {
+          await new Promise(r => setTimeout(r, 120));
+        }
+      }
+
+      this.diversityTask.status = 'completed';
+      this.diversityTask.currentGame = null;
+      this.broadcastSSE('diversity_status', this.getDiversityStatus());
+      this.addLog(`🎉 [TURBO DIVERSITY HOÀN TẤT] Tổng cộng ${this.diversityTask.successCount.toLocaleString()} / ${this.diversityTask.target.toLocaleString()} games đã nạp thành công lên Discord! Hãy mở Discord kiểm tra huy hiệu!`, 'SUCCESS');
+    })();
+
+    return {
+      success: true,
+      target: this.diversityTask.target
     };
   }
 

@@ -1152,6 +1152,46 @@ class App {
     }
   }
 
+  async turboInjectDiversity(count) {
+    if (!this.token) { this.openTokenModal(); return; }
+    const targetCount = parseInt(count);
+    if (!targetCount || targetCount <= 0) {
+      this.showToast('Vui lòng chọn hoặc nhập số games hợp lệ (> 0)!', 'error');
+      return;
+    }
+
+    const badge = document.getElementById('turboDiversityStatusBadge');
+    if (badge) {
+      badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center space-x-1.5 animate-pulse';
+      badge.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang nạp +${targetCount.toLocaleString()} games...</span>`;
+    }
+
+    this.showToast(`🎮 Đang kích hoạt gói bơm siêu tốc +${targetCount.toLocaleString()} games lên Discord...`, 'info');
+
+    try {
+      const res = await fetch('/api/diversity/turbo-inject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetCount })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        this.showToast(data.message || 'Lỗi bơm game đa dạng.', 'error');
+      } else {
+        this.showToast(`👑 Đã bắt đầu nạp +${data.target.toLocaleString()} games! Tiến trình sẽ cập nhật trực tiếp trên thanh trạng thái.`, 'success');
+      }
+    } catch (e) {
+      this.showToast(`Lỗi: ${e.message}`, 'error');
+    } finally {
+      if (badge) {
+        setTimeout(() => {
+          badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 flex items-center space-x-1.5';
+          badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span><span>Sẵn sàng nạp</span>`;
+        }, 5000);
+      }
+    }
+  }
+
   async stopPlaytime() { await fetch('/api/playtime/stop', { method: 'POST' }); }
 
   updatePlaytimeUI(status) {
@@ -1618,6 +1658,25 @@ class App {
         this.turboInject(hours);
       } else {
         this.showToast('Vui lòng nhập số giờ muốn bơm!', 'error');
+        input?.focus();
+      }
+    });
+
+    // Turbo Diversity Controls
+    document.querySelectorAll('.btn-turbo-diversity-quick').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const count = parseInt(btn.dataset.count);
+        if (count) this.turboInjectDiversity(count);
+      });
+    });
+
+    document.getElementById('btnTurboDiversityCustom')?.addEventListener('click', () => {
+      const input = document.getElementById('turboDiversityCustomInput');
+      const count = parseInt(input?.value);
+      if (count && count > 0) {
+        this.turboInjectDiversity(count);
+      } else {
+        this.showToast('Vui lòng nhập số games muốn bơm!', 'error');
         input?.focus();
       }
     });
