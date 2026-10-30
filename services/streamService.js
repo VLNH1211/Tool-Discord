@@ -217,6 +217,25 @@ class StreamService {
       }
     });
 
+    // Opcode 18: STREAM_CREATE (Kích hoạt huy hiệu đỏ [TRỰC TIẾP / LIVE] trong kênh thoại Discord)
+    const streamKey = `guild:${channel.guild?.id}:${channel.id}:${this.streamerClient.user.id}`;
+    this.state.streamKey = streamKey;
+
+    setTimeout(() => {
+      if (this.streamerClient && this.streamerClient.ws) {
+        this.streamerClient.ws.broadcast({
+          op: 18,
+          d: {
+            type: 'guild',
+            guild_id: channel.guild?.id || null,
+            channel_id: channel.id,
+            preferred_region: null
+          }
+        });
+        this.broadcast(`✅ [Streamer] Đã kích hoạt Opcode 18 (STREAM_CREATE). Huy hiệu đỏ [TRỰC TIẾP / LIVE] đã hiển thị trên kênh "${channel.name}"!`, 'success');
+      }
+    }, 1200);
+
     // Set Go Live / Streaming Presence
     try {
       this.streamerClient.user.setActivity('Screen Share 5000h', {
@@ -343,6 +362,18 @@ class StreamService {
         self_video: false
       }
     });
+
+    // Opcode 19: STREAM_WATCH (Báo cho Discord rằng tài khoản phụ đang xem trực tiếp stream của Streamer!)
+    const streamKey = `guild:${guildId}:${channelId}:${this.streamerClient?.user?.id}`;
+    setTimeout(() => {
+      if (this.viewerClient && this.viewerClient.ws) {
+        this.viewerClient.ws.broadcast({
+          op: 19,
+          d: { stream_key: streamKey }
+        });
+        this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã nhận luồng stream và đang xem trực tiếp!`, 'success');
+      }
+    }, 1500);
 
     this.state.viewerState = 'connected';
     this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã vào kênh thoại làm khán giả! Điều kiện tính giờ stream đã thỏa mãn 100%!`, 'success');
