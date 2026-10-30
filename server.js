@@ -512,13 +512,29 @@ app.post('/api/diversity/stop', (req, res) => {
 // --- PLAYTIME HOURS BOOSTER ---
 app.post('/api/playtime/start', async (req, res) => {
   try {
-    const { gameId, gameName, executable, intervalSec, targetHours } = req.body;
+    const { gameId, gameName, executable, intervalSec, targetHours, speedMultiplier } = req.body;
     const result = await taskManager.startPlaytime({
       gameId,
       gameName,
       executable,
       intervalSec,
-      targetHours
+      targetHours,
+      speedMultiplier
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/playtime/turbo-inject', async (req, res) => {
+  try {
+    const { gameId, gameName, executable, hoursToAdd } = req.body;
+    const result = await taskManager.turboInjectPlaytime({
+      gameId,
+      gameName,
+      executable,
+      hoursToAdd
     });
     res.json(result);
   } catch (error) {

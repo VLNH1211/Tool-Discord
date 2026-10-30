@@ -51,7 +51,8 @@ class TaskManager {
       elapsedSeconds: 0,
       startedAt: null,
       timer: null,
-      intervalSec: 30
+      intervalSec: 30,
+      speedMultiplier: 1
     };
 
     this.questTask = {
@@ -399,11 +400,12 @@ class TaskManager {
       accumulatedSeconds: this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds,
       targetHours: this.targetPlaytimeHours,
       startedAt: this.playtimeTask.startedAt,
-      intervalSec: this.playtimeTask.intervalSec
+      intervalSec: this.playtimeTask.intervalSec,
+      speedMultiplier: this.playtimeTask.speedMultiplier || 1
     };
   }
 
-  async startPlaytime({ gameId, gameName, executable, intervalSec = 30, targetHours = 5000 }) {
+  async startPlaytime({ gameId, gameName, executable, intervalSec = 30, targetHours = 5000, speedMultiplier = 1 }) {
     if (!this.user.token || !this.user.analyticsToken) {
       throw new Error('Chưa đăng nhập Discord Token hoặc thiếu Analytics Token!');
     }
@@ -423,6 +425,7 @@ class TaskManager {
       executable: executable || 'cs2.exe'
     };
 
+    const multiplier = Math.max(1, parseInt(speedMultiplier) || 1);
     const sessionId = uuidv4();
     this.playtimeTask.status = 'running';
     this.playtimeTask.game = game;
@@ -431,10 +434,12 @@ class TaskManager {
     this.playtimeTask.totalHeartbeats = 0;
     this.playtimeTask.elapsedSeconds = 0;
     this.playtimeTask.startedAt = Date.now();
-    this.playtimeTask.intervalSec = Math.max(15, parseInt(intervalSec) || 30);
+    this.playtimeTask.intervalSec = Math.max(10, parseInt(intervalSec) || 30);
+    this.playtimeTask.speedMultiplier = multiplier;
 
+    const speedDesc = multiplier > 1 ? ` [⚡ Turbo ${multiplier}x Tốc Độ]` : '';
     this.addLog(
-      `🎮 Khởi động AFK Playtime: "${game.name}" (Heartbeat mỗi ${this.playtimeTask.intervalSec}s). Session ID: ${sessionId.slice(0, 8)}...`,
+      `🎮 Khởi động AFK Playtime${speedDesc}: "${game.name}" (Heartbeat mỗi ${this.playtimeTask.intervalSec}s). Session ID: ${sessionId.slice(0, 8)}...`,
       'SCIENCE'
     );
 
@@ -447,18 +452,19 @@ class TaskManager {
 
     // Setup timer
     this.playtimeTask.timer = setInterval(async () => {
-      this.playtimeTask.elapsedSeconds += this.playtimeTask.intervalSec;
+      this.playtimeTask.elapsedSeconds += (this.playtimeTask.intervalSec * this.playtimeTask.speedMultiplier);
       await this._sendPlaytimeHeartbeat(false);
       this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
     }, this.playtimeTask.intervalSec * 1000);
 
     this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
-    return { success: true, game };
+    return { success: true, game, speedMultiplier: multiplier };
   }
 
   async _sendPlaytimeHeartbeat(isInitial = false) {
     try {
-      const durationMs = this.playtimeTask.intervalSec * 1000;
+      const multiplier = this.playtimeTask.speedMultiplier || 1;
+      const durationMs = this.playtimeTask.intervalSec * 1000 * multiplier;
       const events = discordClient.createPlaytimeHeartbeatEvent(
         this.playtimeTask.game,
         this.playtimeTask.sessionId,
@@ -476,13 +482,12 @@ class TaskManager {
       if (result.success) {
         this.playtimeTask.totalHeartbeats++;
         this.playtimeTask.sequence++;
-        const mins = Math.floor(this.playtimeTask.elapsedSeconds / 60);
-        const secs = this.playtimeTask.elapsedSeconds % 60;
+        const totalHours = ((this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds) / 3600).toFixed(2);
         this.addLog(
-          `⏱ [Playtime] Heartbeat #${this.playtimeTask.totalHeartbeats} cho "${this.playtimeTask.game.name}" thành công (Đã cày: ${mins}m ${secs}s).`,
+          `⏱ [Playtime] Heartbeat #${this.playtimeTask.totalHeartbeats} (${multiplier}x) cho "${this.playtimeTask.game.name}" thành công! Tổng tích lũy hiện tại: ${totalHours} giờ.`,
           'SCIENCE'
         );
-        if (this.playtimeTask.totalHeartbeats % 5 === 0) {
+        if (this.playtimeTask.totalHeartbeats % 3 === 0) {
           this._savePlaytimeStats();
         }
       } else {
@@ -491,6 +496,74 @@ class TaskManager {
     } catch (err) {
       this.addLog(`❌ Lỗi gửi Playtime heartbeat: ${err.message}`, 'ERROR');
     }
+  }
+
+  /**
+   * TURBO INSTANT INJECTOR: Bơm siêu tốc trực tiếp hàng trăm / hàng nghìn giờ lên Discord
+   */
+  async turboInjectPlaytime({ gameId, gameName, executable, hoursToAdd = 5000 }) {
+    if (!this.user.token || !this.user.analyticsToken) {
+      throw new Error('Chưa đăng nhập Discord Token hoặc thiếu Analytics Token!');
+    }
+
+    const hours = parseInt(hoursToAdd) || 5000;
+    const game = {
+      id: String(gameId || '700136079562375258'),
+      name: gameName || 'VALORANT',
+      executable: executable || 'VALORANT-Win64-Shipping.exe'
+    };
+
+    this.addLog(`⚡ [TURBO INJECTION] Bắt đầu kích hoạt gói bơm siêu tốc +${hours.toLocaleString()} GIỜ cho game "${game.name}"...`, 'WARN');
+
+    // Chunks of max 5,000h per telemetry batch to avoid integer overflow
+    const chunkSize = 5000;
+    let remaining = hours;
+    let totalSuccess = 0;
+    const sessionId = uuidv4();
+    let seq = 1;
+
+    // Send initial launch game event
+    try {
+      const launchEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, true, 60000);
+      await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, launchEvents);
+    } catch (e) {
+      console.warn('Turbo launch warning:', e.message);
+    }
+
+    while (remaining > 0) {
+      const batchHours = Math.min(remaining, chunkSize);
+      const durationMs = batchHours * 3600 * 1000;
+      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, false, durationMs);
+
+      const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, heartbeatEvents);
+      if (res.success) {
+        totalSuccess += batchHours;
+        remaining -= batchHours;
+        this.accumulatedPlaytimeSeconds += (batchHours * 3600);
+        this.addLog(`⚡ [TURBO] Đã bơm thành công đợt +${batchHours.toLocaleString()}h! Tổng tiến độ: ${totalSuccess.toLocaleString()} / ${hours.toLocaleString()} giờ.`, 'SUCCESS');
+      } else {
+        this.addLog(`⚠️ [TURBO] Discord từ chối đợt bơm: ${res.message}`, 'WARN');
+        break;
+      }
+
+      if (remaining > 0) {
+        await new Promise(r => setTimeout(r, 600)); // safe interval between batches
+      }
+    }
+
+    if (this.settings.enableGatewayPresence) {
+      gateway.updatePresence(game.name, game.id);
+    }
+
+    this._savePlaytimeStats();
+    this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
+    this.addLog(`👑 [TURBO HOÀN TẤT] Bơm thành công tổng cộng +${totalSuccess.toLocaleString()} giờ chơi lên máy chủ Discord! Hãy mở Discord kiểm tra huy hiệu!`, 'SUCCESS');
+
+    return {
+      success: true,
+      addedHours: totalSuccess,
+      totalAccumulatedHours: (this.accumulatedPlaytimeSeconds / 3600).toFixed(1)
+    };
   }
 
   stopPlaytime() {

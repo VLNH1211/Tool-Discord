@@ -1081,6 +1081,7 @@ class App {
   async startPlaytime() {
     if (!this.token) { this.openTokenModal(); return; }
     const intervalSec = parseInt(document.getElementById('playtimeIntervalSelect')?.value) || 30;
+    const speedMultiplier = parseInt(document.getElementById('playtimeSpeedMultiplier')?.value) || 1;
     const targetHours = this.targetPlaytimeHours || 5000;
 
     const res = await fetch('/api/playtime/start', {
@@ -1091,6 +1092,7 @@ class App {
         gameName: this.selectedPlaytimeGame.name,
         executable: this.selectedPlaytimeGame.executable,
         intervalSec,
+        speedMultiplier,
         targetHours
       })
     });
@@ -1098,7 +1100,55 @@ class App {
     if (!data.success) {
       alert(data.message);
     } else {
-      this.showToast(`Bắt đầu cày ${targetHours}h game "${this.selectedPlaytimeGame.name}"!`, 'success');
+      const turboNote = speedMultiplier > 1 ? ` (⚡ Turbo ${speedMultiplier}x)` : '';
+      this.showToast(`Bắt đầu cày ${targetHours}h game "${this.selectedPlaytimeGame.name}"${turboNote}!`, 'success');
+    }
+  }
+
+  async turboInject(hours) {
+    if (!this.token) { this.openTokenModal(); return; }
+    const targetHours = parseInt(hours);
+    if (!targetHours || targetHours <= 0) {
+      this.showToast('Vui lòng nhập số giờ hợp lệ (> 0)!', 'error');
+      return;
+    }
+
+    const badge = document.getElementById('turboInjectStatusBadge');
+    if (badge) {
+      badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1.5 animate-pulse';
+      badge.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang bơm +${targetHours.toLocaleString()}h...</span>`;
+    }
+
+    this.showToast(`⚡ Đang gửi gói tin bơm siêu tốc +${targetHours.toLocaleString()} giờ lên Discord...`, 'info');
+
+    try {
+      const res = await fetch('/api/playtime/turbo-inject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: this.selectedPlaytimeGame.id,
+          gameName: this.selectedPlaytimeGame.name,
+          executable: this.selectedPlaytimeGame.executable,
+          hoursToAdd: targetHours
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        this.showToast(data.message || 'Lỗi bơm giờ.', 'error');
+      } else {
+        this.showToast(`👑 Bơm thành công +${data.addedHours.toLocaleString()} giờ! Tổng tích lũy: ${data.totalAccumulatedHours}h. Hãy mở Discord kiểm tra huy hiệu!`, 'success');
+      }
+    } catch (e) {
+      this.showToast(`Lỗi: ${e.message}`, 'error');
+    } finally {
+      if (badge) {
+        badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1.5';
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Đã hoàn tất</span>`;
+        setTimeout(() => {
+          badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center space-x-1.5';
+          badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Sẵn sàng bơm</span>`;
+        }, 3000);
+      }
     }
   }
 
@@ -1552,6 +1602,25 @@ class App {
     // Playtime Controls
     document.getElementById('btnStartPlaytime').addEventListener('click', () => this.startPlaytime());
     document.getElementById('btnStopPlaytime').addEventListener('click', () => this.stopPlaytime());
+
+    // Turbo Instant Injection Controls
+    document.querySelectorAll('.btn-turbo-quick').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hours = parseInt(btn.dataset.hours);
+        if (hours) this.turboInject(hours);
+      });
+    });
+
+    document.getElementById('btnExecuteCustomTurbo')?.addEventListener('click', () => {
+      const input = document.getElementById('inputCustomTurboHours');
+      const hours = parseInt(input?.value);
+      if (hours && hours > 0) {
+        this.turboInject(hours);
+      } else {
+        this.showToast('Vui lòng nhập số giờ muốn bơm!', 'error');
+        input?.focus();
+      }
+    });
 
     // Headless Stream Controls
     document.getElementById('btnStartStream')?.addEventListener('click', () => this.startStream());
