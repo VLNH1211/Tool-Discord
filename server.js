@@ -183,7 +183,7 @@ app.post('/api/accounts/switch', async (req, res) => {
 
   res.json({
     success: true,
-    profile,
+    profile: { ...profile, token: acc.token },
     accounts: accountVault.getAccounts()
   });
 });

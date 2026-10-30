@@ -68,8 +68,15 @@ class App {
       if (data.stream) this.updateStreamUI(data.stream);
       if (data.autoResponder) this.updateAutoResponderUI(data.autoResponder);
       if (data.accounts) {
-        this.accounts = data.accounts;
-        this.renderAccountsVault();
+        const perm = this.getPermanentAccounts();
+        const serverList = data.accounts || [];
+        const missingOnServer = perm.filter(pa => pa.token && !serverList.some(sa => sa.userId === pa.userId));
+        if (missingOnServer.length > 0) {
+          this.syncAccountsWithServer();
+        } else {
+          this.accounts = serverList;
+          this.renderAccountsVault();
+        }
       }
       if (data.logs) {
         data.logs.forEach(log => this.appendLog(log, false));
@@ -131,8 +138,15 @@ class App {
       if (data.stream) this.updateStreamUI(data.stream);
       if (data.autoResponder) this.updateAutoResponderUI(data.autoResponder);
       if (data.accounts) {
-        this.accounts = data.accounts;
-        this.renderAccountsVault();
+        const perm = this.getPermanentAccounts();
+        const serverList = data.accounts || [];
+        const missingOnServer = perm.filter(pa => pa.token && !serverList.some(sa => sa.userId === pa.userId));
+        if (missingOnServer.length > 0) {
+          this.syncAccountsWithServer();
+        } else {
+          this.accounts = serverList;
+          this.renderAccountsVault();
+        }
       }
     } catch (e) {
       console.warn('Status fetch error:', e);
@@ -172,6 +186,15 @@ class App {
         this.user = data.profile;
         this.token = cleanToken;
         localStorage.setItem('discord_user_token', cleanToken);
+        this.savePermanentAccount({
+          userId: data.profile.id,
+          username: data.profile.username,
+          global_name: data.profile.global_name,
+          avatar: data.profile.avatar,
+          token: cleanToken,
+          label: label || data.account?.label || 'Tài khoản chính',
+          isActive: true
+        });
         this.renderUserProfile(data.profile);
         if (data.accounts) {
           this.accounts = data.accounts;
@@ -316,43 +339,76 @@ class App {
     } catch (e) {}
   }
 
+  getPermanentAccounts() {
+    try {
+      const raw = localStorage.getItem('discord_permanent_vault');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+
+    let legacy = [];
+    try {
+      const stored = localStorage.getItem('discord_vault_accounts');
+      if (stored) legacy = JSON.parse(stored);
+    } catch (e) {}
+
+    const tokens = this.getStoredTokens();
+    const migrated = (legacy || []).map(acc => ({
+      ...acc,
+      token: acc.token || tokens[acc.id] || tokens[acc.userId] || tokens[acc.username] || (acc.isActive ? this.token : null)
+    })).filter(acc => acc.token);
+
+    if (migrated.length > 0) {
+      try {
+        localStorage.setItem('discord_permanent_vault', JSON.stringify(migrated));
+      } catch (e) {}
+      return migrated;
+    }
+    return [];
+  }
+
+  savePermanentAccount(accountObj) {
+    if (!accountObj || !accountObj.token) return;
+    try {
+      const accounts = this.getPermanentAccounts();
+      const cleanToken = String(accountObj.token).trim();
+      const idx = accounts.findIndex(a => (accountObj.userId && a.userId === accountObj.userId) || (accountObj.id && a.id === accountObj.id) || a.token === cleanToken);
+      if (idx >= 0) {
+        accounts[idx] = { ...accounts[idx], ...accountObj, token: cleanToken };
+      } else {
+        accounts.push({ ...accountObj, token: cleanToken });
+      }
+      localStorage.setItem('discord_permanent_vault', JSON.stringify(accounts));
+      if (accountObj.userId) this.setStoredToken(accountObj.userId, cleanToken);
+      if (accountObj.id) this.setStoredToken(accountObj.id, cleanToken);
+    } catch (e) {}
+  }
+
   async syncAccountsWithServer() {
     try {
+      const permAccounts = this.getPermanentAccounts();
+
       // 1. Fetch current server accounts
       const res = await fetch('/api/accounts');
       const data = await res.json();
       let serverAccounts = data.accounts || [];
 
-      // 2. Read stored accounts from localStorage
-      let localAccounts = [];
-      try {
-        const stored = localStorage.getItem('discord_vault_accounts');
-        if (stored) localAccounts = JSON.parse(stored);
-      } catch (e) {}
+      // 2. Identify missing accounts on server that we have locally with tokens
+      const missingOnServer = permAccounts.filter(pa => 
+        pa.token && !serverAccounts.some(sa => sa.userId === pa.userId)
+      );
 
-      // Attach client-stored tokens to local accounts before syncing
-      const tokens = this.getStoredTokens();
-      localAccounts.forEach(la => {
-        if (!la.token) {
-          la.token = tokens[la.id] || tokens[la.userId] || tokens[la.username] || (la.isActive ? this.token : null);
-        }
-      });
-
-      // If localStorage has accounts not on server, sync them to server
-      if (localAccounts.length > 0) {
-        const missingOnServer = localAccounts.filter(la => 
-          !serverAccounts.some(sa => sa.userId === la.userId)
-        );
-        if (missingOnServer.length > 0) {
-          const syncRes = await fetch('/api/accounts/sync-all', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accounts: missingOnServer })
-          });
-          const syncData = await syncRes.json();
-          if (syncData.success && syncData.accounts) {
-            serverAccounts = syncData.accounts;
-          }
+      if (missingOnServer.length > 0) {
+        const syncRes = await fetch('/api/accounts/sync-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accounts: missingOnServer })
+        });
+        const syncData = await syncRes.json();
+        if (syncData.success && syncData.accounts) {
+          serverAccounts = syncData.accounts;
         }
       }
 
@@ -366,9 +422,16 @@ class App {
 
   saveAccountsToStorage() {
     try {
-      if (Array.isArray(this.accounts)) {
-        localStorage.setItem('discord_vault_accounts', JSON.stringify(this.accounts));
-      }
+      const perm = this.getPermanentAccounts();
+      const merged = (this.accounts || []).map(acc => {
+        const found = perm.find(p => p.userId === acc.userId || p.id === acc.id);
+        return {
+          ...acc,
+          token: found?.token || (acc.isActive ? this.token : null)
+        };
+      });
+      localStorage.setItem('discord_permanent_vault', JSON.stringify(merged));
+      localStorage.setItem('discord_vault_accounts', JSON.stringify(this.accounts));
     } catch (e) {}
   }
 
