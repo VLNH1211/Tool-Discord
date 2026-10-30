@@ -579,6 +579,19 @@
                 <span class="text-[11px] text-[#949ba4]">Đổi tài khoản tại đây sẽ tự nạp nhiệm vụ riêng của tài khoản đó.</span>
               </div>
             </div>
+
+            <!-- Quick Video Quest Injector -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#383a40]/60 bg-[#242629]/50 p-3 rounded-xl border border-[#383a40]">
+              <div class="flex flex-1 items-center space-x-2">
+                <span class="text-xs text-indigo-300 font-medium whitespace-nowrap flex items-center space-x-1">
+                  <span>🎬 Cày nhanh Video Quest theo ID:</span>
+                </span>
+                <input type="text" id="quickVideoQuestId" placeholder="Dán Quest ID hoặc link video (chuột phải thẻ quest trên Discord -> Copy Link)" class="flex-1 min-w-[200px] bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500">
+              </div>
+              <button id="btnRunQuickVideoQuest" class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1">
+                <span>⚡ Cày & Nhận Quà (2s)</span>
+              </button>
+            </div>
           </div>
 
           <!-- Queue Progress Banner (shown when running) -->
@@ -1022,6 +1035,6 @@
   </div>
 
   <!-- Custom Scripts -->
-  <script src="/js/app.js?v=3.5.3"></script>
+  <script src="/js/app.js?v=3.5.4"></script>
 </body>
 </html>

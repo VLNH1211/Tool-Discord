@@ -2194,6 +2194,44 @@ class App {
         select.disabled = false;
       }
     });
+    document.getElementById('btnRunQuickVideoQuest')?.addEventListener('click', async () => {
+      const input = document.getElementById('quickVideoQuestId');
+      const val = input?.value?.trim();
+      if (!val) {
+        this.showToast('Vui lòng dán Quest ID hoặc link video vào ô!', 'error');
+        input?.focus();
+        return;
+      }
+      const btn = document.getElementById('btnRunQuickVideoQuest');
+      const originalHtml = btn.innerHTML;
+      try {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang xử lý...</span>`;
+        this.showToast('🎬 Đang kích hoạt video quest và nhận quà...', 'info');
+
+        const res = await fetch('/api/quests/instant-video', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': this.token
+          },
+          body: JSON.stringify({ questId: val, duration: 30 })
+        });
+        const data = await res.json();
+        if (data.success) {
+          this.showToast(data.message || '🎉 Đã hoàn tất video quest và nhận quà thành công!', 'success');
+          input.value = '';
+          await this.loadQuests();
+        } else {
+          this.showToast(data.message || 'Lỗi xử lý video quest.', 'error');
+        }
+      } catch (err) {
+        this.showToast(`Lỗi: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    });
     document.getElementById('btnRefreshQuests')?.addEventListener('click', () => this.loadQuests());
     document.getElementById('btnAutoFarmAllQuests')?.addEventListener('click', () => this.startAutoFarmAllQuests());
     document.getElementById('btnStopQuestFarm')?.addEventListener('click', () => this.stopQuestFarm());

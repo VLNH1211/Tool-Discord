@@ -495,6 +495,35 @@ app.post('/api/quests/claim', async (req, res) => {
   res.json(result);
 });
 
+app.post('/api/quests/instant-video', async (req, res) => {
+  try {
+    const { questId, duration = 30 } = req.body;
+    const token = req.headers.authorization || taskManager.user.token;
+    if (!token) return res.status(401).json({ success: false, message: 'Chưa đăng nhập.' });
+    if (!questId) return res.status(400).json({ success: false, message: 'Thiếu Quest ID.' });
+
+    const cleanId = String(questId).trim().match(/\d{15,22}/)?.[0] || String(questId).trim();
+    taskManager.addLog(`🎬 Đang tự động kích hoạt & nhận thưởng video quest: ${cleanId}...`, 'QUEST');
+
+    // 1. Enroll
+    await discordClient.enrollQuest(token, cleanId);
+    
+    // 2. Video progress
+    await discordClient.sendQuestVideoProgress(token, cleanId, parseFloat(duration) || 30);
+    
+    // 3. Claim
+    const claimRes = await discordClient.claimQuest(token, cleanId);
+    if (claimRes.success) {
+      taskManager.addLog(`🏆 Đã nhận thưởng thành công cho Video Quest ${cleanId}!`, 'SUCCESS');
+      return res.json({ success: true, message: 'Đã hoàn thành và nhận thưởng thành công!', data: claimRes.data });
+    } else {
+      return res.json({ success: true, message: `Đã gửi tiến độ video: ${claimRes.message || 'Chờ nhận'}` });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.post('/api/quests/start-farm', async (req, res) => {
   try {
     const token = req.headers.authorization || taskManager.user.token;
