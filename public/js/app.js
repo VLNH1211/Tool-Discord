@@ -1723,11 +1723,20 @@ class App {
         }
       } else if (status.status === 'completed') {
         banner.classList.remove('hidden');
-        if (titleEl) titleEl.textContent = '🏆🎉 ĐÃ HOÀN THÀNH TẤT CẢ NHIỆM VỤ SONG SONG & TỰ ĐỘNG NHẬN THƯỞNG!';
-        if (countBadge) countBadge.textContent = `100% Hoàn thành`;
+        if (titleEl) {
+          titleEl.textContent = (status.queueTotal === 0)
+            ? '🎉 Tất cả nhiệm vụ Discord Quests hiện có đã hoàn thành 100%!'
+            : '🏆🎉 ĐÃ HOÀN THÀNH TẤT CẢ NHIỆM VỤ SONG SONG & TỰ ĐỘNG NHẬN THƯỞNG!';
+        }
+        if (countBadge) countBadge.textContent = `100% Hoàn tất`;
         if (timeProgress) timeProgress.textContent = 'Toàn bộ phần thưởng (Orbs, Avatar...) đã được nạp vào tài khoản Discord!';
         if (progressBar) progressBar.style.width = '100%';
-        setTimeout(() => this.loadQuests(), 3000);
+        if (btnAuto) {
+          btnAuto.disabled = false;
+          btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
+          btnAuto.innerHTML = `<span>⚡ Cày Song Song Tất Cả Quests (Cùng Lúc)</span>`;
+        }
+        setTimeout(() => this.loadQuests(), 1500);
       } else if (status.status === 'stopped') {
         banner.classList.remove('hidden');
         if (titleEl) titleEl.textContent = '⏹ Đã dừng tiến trình cày Quests';
@@ -1808,6 +1817,14 @@ class App {
           btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
           btnAuto.innerHTML = `<span>⚡ Cày Song Song Tất Cả Quests (Cùng Lúc)</span>`;
         }
+      } else if (data.total === 0) {
+        this.showToast('🎉 Tuyệt vời! Bạn đã hoàn thành 100% tất cả các nhiệm vụ Discord Quests!', 'success');
+        if (btnAuto) {
+          btnAuto.disabled = false;
+          btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
+          btnAuto.innerHTML = `<span>⚡ Cày Song Song Tất Cả Quests (Cùng Lúc)</span>`;
+        }
+        await this.loadQuests();
       } else {
         this.showToast(data.message || `Đang chạy song song ${data.total || ''} nhiệm vụ!`, 'success');
       }
