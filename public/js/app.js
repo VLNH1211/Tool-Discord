@@ -1688,12 +1688,7 @@ class App {
     }
 
     if (btnStop) {
-      btnStop.disabled = !isRunning;
-      if (isRunning) {
-        btnStop.classList.remove('disabled:opacity-40', 'disabled:cursor-not-allowed');
-      } else {
-        btnStop.classList.add('disabled:opacity-40', 'disabled:cursor-not-allowed');
-      }
+      btnStop.disabled = false;
     }
 
     if (banner) {
@@ -1728,8 +1723,10 @@ class App {
         if (progressBar) progressBar.style.width = '100%';
         setTimeout(() => this.loadQuests(), 3000);
       } else if (status.status === 'stopped') {
+        banner.classList.remove('hidden');
         if (titleEl) titleEl.textContent = '⏹ Đã dừng tiến trình cày Quests';
-        if (timeProgress) timeProgress.textContent = 'Bấm "⚡ Cày Tự Động Tất Cả Quests" để tiếp tục.';
+        if (timeProgress) timeProgress.textContent = 'Đã tạm dừng. Bấm "⚡ Cày Tự Động Tất Cả Quests" để tiếp tục.';
+        if (progressBar) progressBar.style.width = '0%';
       } else {
         banner.classList.add('hidden');
       }
@@ -1803,6 +1800,10 @@ class App {
   }
 
   async stopQuestFarm() {
+    const btnStop = document.getElementById('btnStopQuestFarm');
+    if (btnStop) {
+      btnStop.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang dừng...</span>`;
+    }
     this.showToast('⏹ Đang dừng tiến trình cày Quests...', 'warn');
     try {
       const res = await fetch('/api/quests/stop-farm', {
@@ -1814,10 +1815,15 @@ class App {
       });
       const data = await res.json();
       if (data.success) {
-        this.showToast('Đã dừng tiến trình cày Quests!', 'info');
+        this.showToast('Đã dừng toàn bộ tiến trình cày Quests thành công!', 'info');
+        this.updateQuestRunningUI({ status: 'stopped' });
       }
     } catch (e) {
       this.showToast(`Lỗi: ${e.message}`, 'error');
+    } finally {
+      if (btnStop) {
+        btnStop.innerHTML = `<span>⏹ Dừng Lại</span>`;
+      }
     }
   }
 
