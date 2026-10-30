@@ -13,7 +13,18 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Disable caching for frontend scripts and HTML so updates apply immediately
+app.use((req, res, next) => {
+  if (req.url.endsWith('.js') || req.url.endsWith('.html') || req.url === '/') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
+app.use(express.static(path.join(__dirname, 'public'), { etag: false, maxAge: 0 }));
 
 // --- SSE ENDPOINT ---
 app.get('/api/events', (req, res) => {

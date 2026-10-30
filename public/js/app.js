@@ -250,9 +250,16 @@ class App {
   async switchAccount(accountId) {
     try {
       // Find account token from permanent vault if possible
-      const localAccounts = this.getPermanentAccounts();
-      const localAcc = localAccounts.find(a => a.id === accountId || a.userId === accountId);
-      const token = localAcc?.token || this.getStoredToken(accountId);
+      let token = null;
+      try {
+        const localAccounts = (typeof this.getPermanentAccounts === 'function') ? this.getPermanentAccounts() : [];
+        const localAcc = localAccounts.find(a => a.id === accountId || a.userId === accountId);
+        token = localAcc?.token || (typeof this.getStoredToken === 'function' ? this.getStoredToken(accountId) : null);
+        if (!token) {
+          const rawTokens = JSON.parse(localStorage.getItem('discord_tokens_vault') || '{}');
+          token = rawTokens[String(accountId)] || null;
+        }
+      } catch (err) {}
 
       const res = await fetch('/api/accounts/switch', {
         method: 'POST',
@@ -1539,9 +1546,21 @@ class App {
 
     try {
       const activeAcc = (this.accounts || []).find(a => a.isActive);
-      const permAccounts = this.getPermanentAccounts();
-      const permAcc = activeAcc ? permAccounts.find(a => a.id === activeAcc.id || a.userId === activeAcc.userId) : null;
-      const accToken = permAcc?.token || (activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null);
+      let accToken = null;
+      try {
+        const permAccounts = (typeof this.getPermanentAccounts === 'function') ? this.getPermanentAccounts() : [];
+        const permAcc = activeAcc ? permAccounts.find(a => a.id === activeAcc.id || a.userId === activeAcc.userId) : null;
+        let storedToken = null;
+        if (typeof this.getStoredToken === 'function' && activeAcc) {
+          storedToken = this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id);
+        }
+        if (!storedToken && activeAcc) {
+          const rawTokens = JSON.parse(localStorage.getItem('discord_tokens_vault') || '{}');
+          storedToken = rawTokens[String(activeAcc.userId)] || rawTokens[String(activeAcc.id)] || null;
+        }
+        accToken = permAcc?.token || storedToken || activeAcc?.token || null;
+      } catch (err) {}
+
       const effectiveToken = accToken || this.token || localStorage.getItem('discord_user_token');
       if (effectiveToken) {
         this.token = effectiveToken;
@@ -1857,9 +1876,21 @@ class App {
 
   async startAutoFarmAllQuests() {
     const activeAcc = (this.accounts || []).find(a => a.isActive);
-    const permAccounts = this.getPermanentAccounts();
-    const permAcc = activeAcc ? permAccounts.find(a => a.id === activeAcc.id || a.userId === activeAcc.userId) : null;
-    const accToken = permAcc?.token || (activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null);
+    let accToken = null;
+    try {
+      const permAccounts = (typeof this.getPermanentAccounts === 'function') ? this.getPermanentAccounts() : [];
+      const permAcc = activeAcc ? permAccounts.find(a => a.id === activeAcc.id || a.userId === activeAcc.userId) : null;
+      let storedToken = null;
+      if (typeof this.getStoredToken === 'function' && activeAcc) {
+        storedToken = this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id);
+      }
+      if (!storedToken && activeAcc) {
+        const rawTokens = JSON.parse(localStorage.getItem('discord_tokens_vault') || '{}');
+        storedToken = rawTokens[String(activeAcc.userId)] || rawTokens[String(activeAcc.id)] || null;
+      }
+      accToken = permAcc?.token || storedToken || activeAcc?.token || null;
+    } catch (err) {}
+
     const effectiveToken = accToken || this.token || localStorage.getItem('discord_user_token');
     if (effectiveToken) {
       this.token = effectiveToken;
