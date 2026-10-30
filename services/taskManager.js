@@ -792,136 +792,122 @@ class TaskManager {
     }
 
     // Split into Video Trailer Quests and Play Desktop Quests
-    const videoQuests = [];
-    const gameQuests = [];
+    const activeItems = [];
+    const videoItems = [];
+    const gameItems = [];
 
     for (const q of pendingQuests) {
       const tasksObj = q.config?.task_config_v2?.tasks || q.config?.task_config?.tasks || {};
-      if (tasksObj.WATCH_VIDEO) {
-        videoQuests.push(q);
-      } else {
-        gameQuests.push(q);
-      }
-    }
-
-    this.addLog(
-      `📋 Phân loại nhiệm vụ: ${videoQuests.length} Video Trailer (nhận ngay) | ${gameQuests.length} Chơi Game (cày song song 15 phút).`,
-      'QUEST'
-    );
-
-    // 1. Process Video Trailer Quests immediately (instant fulfill & claim)
-    for (const vq of videoQuests) {
-      if (this.questTask.shouldStop) break;
-      const qTitle = vq.config?.messages?.quest_name || vq.config?.messages?.game_title || 'Video Quest';
-      const targetSec = vq.config?.task_config_v2?.tasks?.WATCH_VIDEO?.target || 
-                        vq.config?.task_config?.tasks?.WATCH_VIDEO?.target || 30;
-      this.addLog(`🎬 [Video Quest] Đang kích hoạt & xem trailer: "${qTitle}"...`, 'QUEST');
-      try {
-        await discordClient.enrollQuest(this.user.token, vq.id);
-        await new Promise(r => setTimeout(r, 400));
-        await discordClient.sendQuestVideoProgress(this.user.token, vq.id, targetSec);
-        await new Promise(r => setTimeout(r, 600));
-        const claimRes = await discordClient.claimQuest(this.user.token, vq.id);
-        if (claimRes.success) {
-          this.addLog(`🏆 [Video Quest] Hoàn thành & đã nhận thưởng cho "${qTitle}"!`, 'SUCCESS');
-        } else {
-          this.addLog(`ℹ️ [Video Quest] Đã gửi xem video "${qTitle}". (${claimRes.message || 'Kiểm tra hòm đồ'})`, 'INFO');
-        }
-      } catch (err) {
-        this.addLog(`⚠️ Lỗi video quest "${qTitle}": ${err.message}`, 'WARN');
-      }
-    }
-
-    // 2. Process Game Quests in parallel
-    if (gameQuests.length > 0) {
-      this.addLog(`🚀 KÍCH HOẠT CÀY SONG SONG ĐỒNG THỜI ${gameQuests.length} NHIỆM VỤ GAME!`, 'QUEST');
-      this._processParallelQuests(gameQuests);
-      return { 
-        success: true, 
-        total: gameQuests.length, 
-        videoTotal: videoQuests.length,
-        message: `Đang cày song song ${gameQuests.length} nhiệm vụ game (đã xử lý ${videoQuests.length} video quest)!`
-      };
-    } else {
-      this.questTask.status = 'completed';
-      this.addLog(`🏆🎉 TẤT CẢ ${videoQuests.length} NHIỆM VỤ VIDEO ĐÃ ĐƯỢC HOÀN THÀNH VÀ NHẬN THƯỞNG!`, 'SUCCESS');
-      this.broadcastSSE('quest_status', this.getQuestStatus());
-      return { 
-        success: true, 
-        total: videoQuests.length, 
-        videoTotal: videoQuests.length,
-        message: `Đã hoàn thành và nhận thưởng ${videoQuests.length} nhiệm vụ video trailer!` 
-      };
-    }
-  }
-
-  async _processParallelQuests(pendingQuests) {
-    this.addLog(`⚡ [Song Song] Đang tự động ghi danh (Enroll) vào toàn bộ ${pendingQuests.length} nhiệm vụ...`, 'QUEST');
-
-    const activeQuests = [];
-    for (const q of pendingQuests) {
-      if (this.questTask.shouldStop) break;
-      try {
-        await discordClient.enrollQuest(this.user.token, q.id);
-      } catch (e) {}
-
+      const isVideo = Boolean(tasksObj.WATCH_VIDEO);
+      const taskObj = tasksObj.WATCH_VIDEO || tasksObj.PLAY_ON_DESKTOP || Object.values(tasksObj)[0];
+      const targetSeconds = taskObj?.target || (isVideo ? 30 : 900);
       const questName = q.config?.messages?.quest_name || q.config?.messages?.game_title || 'Discord Quest';
       const gameTitle = q.config?.messages?.game_title || q.config?.application?.name || 'Game';
       const appId = String(q.config?.application?.id || '');
-      const taskObj = q.config?.task_config_v2?.tasks?.PLAY_ON_DESKTOP || 
-                      q.config?.task_config?.tasks?.PLAY_ON_DESKTOP || 
-                      Object.values(q.config?.task_config_v2?.tasks || q.config?.task_config?.tasks || {})[0];
-      const targetSeconds = taskObj?.target || 900;
-
       const matched = detectables.getGameById(appId);
       const executable = matched?.executable || 'game.exe';
 
-      activeQuests.push({
-        id: q.id,
+      const item = {
+        id: String(q.id),
         name: questName,
         gameId: appId,
         gameName: gameTitle,
         executable: executable,
+        isVideo: isVideo,
         targetSeconds: targetSeconds,
         elapsedSeconds: 0,
         sessionId: uuidv4(),
         sequence: 1,
         completed: false,
         claimed: false
-      });
+      };
+
+      activeItems.push(item);
+      if (isVideo) {
+        videoItems.push(item);
+      } else {
+        gameItems.push(item);
+      }
     }
 
-    if (this.questTask.shouldStop || activeQuests.length === 0) {
-      this.questTask.status = 'stopped';
-      this.broadcastSSE('quest_status', this.getQuestStatus());
-      return;
-    }
-
-    this.questTask.activeQuests = activeQuests;
-    this.questTask.queueTotal = activeQuests.length;
+    // IMMEDIATELY set status and activeQuests so UI lights up right away!
+    this.questTask.activeQuests = activeItems;
+    this.questTask.queueTotal = activeItems.length;
     this.questTask.mode = 'parallel';
     this.questTask.status = 'running';
-    this.questTask.targetSeconds = Math.max(...activeQuests.map(q => q.targetSeconds), 900);
+    this.questTask.shouldStop = false;
     this.questTask.elapsedSeconds = 0;
+    this.questTask.targetSeconds = Math.max(...activeItems.map(q => q.targetSeconds), 900);
 
     this.addLog(
-      `🔥 ĐÃ BẮT ĐẦU CÀY ĐỒNG THỜI ${activeQuests.length} NHIỆM VỤ! Toàn bộ sẽ hoàn thành cùng lúc chỉ trong ~${Math.round(this.questTask.targetSeconds / 60)} phút!`,
+      `🚀 KÍCH HOẠT CÀY SONG SONG ĐỒNG THỜI ${activeItems.length} NHIỆM VỤ (${videoItems.length} Video Trailer + ${gameItems.length} Chơi Game)!`,
       'SUCCESS'
     );
 
-    // Update gateway presence with first active game
-    if (this.settings.enableGatewayPresence && activeQuests[0]) {
-      gateway.updatePresence(activeQuests[0].gameName, activeQuests[0].gameId);
+    // Broadcast IMMEDIATELY so every card on user screen shows progress!
+    this.broadcastSSE('quest_status', this.getQuestStatus());
+
+    // Run execution loop in background
+    this._runUnifiedParallelFarm(videoItems, gameItems);
+
+    return {
+      success: true,
+      total: activeItems.length,
+      videoTotal: videoItems.length,
+      gameTotal: gameItems.length,
+      message: `Đã kích hoạt cày song song đồng thời ${activeItems.length} nhiệm vụ!`
+    };
+  }
+
+  async _runUnifiedParallelFarm(videoItems, gameItems) {
+    // 1. Process Video Trailer Quests in parallel/fast
+    (async () => {
+      for (const vq of videoItems) {
+        if (this.questTask.shouldStop) break;
+        try {
+          this.addLog(`🎬 [Video Quest] Đang kích hoạt & xem trailer: "${vq.name}"...`, 'QUEST');
+          await discordClient.enrollQuest(this.user.token, vq.id);
+          await new Promise(r => setTimeout(r, 400));
+          await discordClient.sendQuestVideoProgress(this.user.token, vq.id, vq.targetSeconds);
+          vq.elapsedSeconds = vq.targetSeconds;
+          vq.completed = true;
+          this.broadcastSSE('quest_status', this.getQuestStatus());
+          await new Promise(r => setTimeout(r, 600));
+          const claimRes = await discordClient.claimQuest(this.user.token, vq.id);
+          if (claimRes.success) {
+            vq.claimed = true;
+            this.addLog(`🏆 [Video Quest] Hoàn thành & nhận thưởng thành công cho "${vq.name}"!`, 'SUCCESS');
+          } else {
+            this.addLog(`ℹ️ [Video Quest] Đã gửi xem video "${vq.name}". (${claimRes.message || 'Kiểm tra hòm đồ'})`, 'INFO');
+          }
+          this.broadcastSSE('quest_status', this.getQuestStatus());
+        } catch (e) {
+          this.addLog(`⚠️ Lỗi video quest "${vq.name}": ${e.message}`, 'WARN');
+        }
+      }
+    })();
+
+    // 2. Enroll all game quests and start gateway presence
+    if (this.settings.enableGatewayPresence && gameItems[0]) {
+      gateway.updatePresence(gameItems[0].gameName, gameItems[0].gameId);
     }
 
-    // Send initial heartbeats
-    for (const item of activeQuests) {
+    for (const gq of gameItems) {
+      if (this.questTask.shouldStop) break;
+      try {
+        await discordClient.enrollQuest(this.user.token, gq.id);
+      } catch (e) {}
+    }
+
+    // 3. Send initial heartbeats for game quests
+    for (const item of gameItems) {
       if (this.questTask.shouldStop) break;
       await this._sendSingleQuestItemHeartbeat(item, true, 15, false);
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 150));
     }
     this.broadcastSSE('quest_status', this.getQuestStatus());
 
+    // 4. Timer loop ticking all game items together
     const intervalSec = 15;
     this.questTask.timer = setInterval(async () => {
       if (this.questTask.shouldStop) {
@@ -935,16 +921,15 @@ class TaskManager {
 
       this.questTask.elapsedSeconds += intervalSec;
 
-      for (const item of this.questTask.activeQuests) {
+      for (const item of gameItems) {
         if (this.questTask.shouldStop) break;
         if (item.completed) continue;
 
         item.elapsedSeconds += intervalSec;
         const isFinished = item.elapsedSeconds >= item.targetSeconds;
 
-        // Send heartbeat (with terminal flag when finished)
         await this._sendSingleQuestItemHeartbeat(item, false, intervalSec, isFinished);
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 150));
 
         if (isFinished) {
           item.completed = true;
@@ -978,6 +963,11 @@ class TaskManager {
         this.broadcastSSE('quest_status', this.getQuestStatus());
       }
     }, intervalSec * 1000);
+  }
+
+  async _processParallelQuests(pendingQuests) {
+    // Replaced by _runUnifiedParallelFarm
+    return;
   }
 
   async _sendSingleQuestItemHeartbeat(item, isInitial = false, intervalSec = 15, isTerminal = false) {

@@ -529,8 +529,6 @@ class App {
     nav.querySelectorAll('.nav-account-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.dataset.id;
-        const currentActive = this.accounts.find(a => a.isActive);
-        if (currentActive && currentActive.id === id) return;
         this.switchAccount(id);
       });
     });
@@ -1511,8 +1509,15 @@ class App {
     grid.innerHTML = `<div class="col-span-full text-center py-8 text-[#949ba4]"><div class="inline-block animate-spin h-6 w-6 border-b-2 border-amber-400 mb-2"></div><p>Đang quét Discord Quests từ máy chủ...</p></div>`;
 
     try {
+      const activeAcc = (this.accounts || []).find(a => a.isActive);
+      const effectiveToken = this.token || activeAcc?.token || (activeAcc?.userId ? this.getStoredToken(activeAcc.userId) : null) || localStorage.getItem('discord_user_token');
+      if (effectiveToken) {
+        this.token = effectiveToken;
+        localStorage.setItem('discord_user_token', effectiveToken);
+      }
+
       const headers = {};
-      if (this.token) headers['Authorization'] = this.token;
+      if (effectiveToken) headers['Authorization'] = effectiveToken;
 
       const res = await fetch('/api/quests', { headers });
       const data = await res.json();
@@ -1787,11 +1792,20 @@ class App {
             const item = activeMap.get(questId);
             btn.disabled = true;
             if (item.completed) {
-              btn.className = 'btn-farm-quest w-full bg-emerald-500 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-1';
-              btn.innerHTML = `<span>✅ Hoàn thành & Đã Claim</span>`;
+              btn.className = 'btn-farm-quest w-full bg-emerald-500 text-black py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-1';
+              btn.innerHTML = `<span>✅ Hoàn thành 100% & Đã Claim</span>`;
             } else {
-              btn.className = 'btn-farm-quest w-full bg-gradient-to-r from-amber-500 to-orange-500 text-black py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-wait flex items-center justify-center space-x-1.5 animate-pulse';
-              btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang cày song song (${item.percentage}%)</span>`;
+              const p = item.percentage || 0;
+              btn.className = 'btn-farm-quest w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-black p-2 rounded-xl text-xs font-bold transition-all shadow-lg cursor-wait flex flex-col items-center justify-center space-y-1.5 border border-amber-300';
+              btn.innerHTML = `
+                <div class="flex items-center justify-between w-full px-1 text-[11px] font-mono">
+                  <span class="flex items-center"><span class="inline-block animate-spin mr-1">↻</span>Đang cày:</span>
+                  <span>${item.elapsedSeconds || 0}s / ${item.targetSeconds || 900}s (${p}%)</span>
+                </div>
+                <div class="w-full bg-black/30 h-2 rounded-full overflow-hidden p-0.5">
+                  <div class="bg-white h-full rounded-full transition-all duration-300" style="width: ${p}%"></div>
+                </div>
+              `;
             }
           } else if (questId === status.questId) {
             btn.disabled = true;
@@ -1850,9 +1864,14 @@ class App {
         await this.loadQuests();
       } else {
         const msg = data.videoTotal 
-          ? `🔥 Đang chạy song song ${data.total} nhiệm vụ game (đã nhận ${data.videoTotal} nhiệm vụ video trailer)!` 
+          ? `🔥 Đang chạy song song ${data.total} nhiệm vụ (${data.videoTotal} video trailer + ${data.gameTotal || (data.total - data.videoTotal)} game)!` 
           : (data.message || `Đang chạy song song ${data.total} nhiệm vụ!`);
         this.showToast(msg, 'success');
+        if (btnAuto) {
+          btnAuto.disabled = true;
+          btnAuto.classList.add('opacity-80', 'cursor-wait');
+          btnAuto.innerHTML = `<span class="inline-block animate-spin mr-1.5">↻</span><span>⚡ Đang cày song song (${data.total} Quests)...</span>`;
+        }
       }
     } catch (e) {
       this.showToast(`Lỗi: ${e.message}`, 'error');
@@ -2003,6 +2022,9 @@ class App {
 
         document.querySelectorAll('.subtab-content').forEach(c => c.classList.add('hidden'));
         document.getElementById(target)?.classList.remove('hidden');
+        if (target === 'subtab-quests') {
+          this.loadQuests();
+        }
       });
     });
 
