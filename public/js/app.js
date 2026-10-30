@@ -340,6 +340,16 @@ class App {
     }
   }
 
+  getStoredToken(identifier) {
+    if (!identifier) return null;
+    try {
+      const tokens = this.getStoredTokens();
+      return tokens[String(identifier)] || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   setStoredToken(identifier, token) {
     if (!identifier || !token) return;
     try {
@@ -1529,7 +1539,9 @@ class App {
 
     try {
       const activeAcc = (this.accounts || []).find(a => a.isActive);
-      const accToken = activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null;
+      const permAccounts = this.getPermanentAccounts();
+      const permAcc = activeAcc ? permAccounts.find(a => a.id === activeAcc.id || a.userId === activeAcc.userId) : null;
+      const accToken = permAcc?.token || (activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null);
       const effectiveToken = accToken || this.token || localStorage.getItem('discord_user_token');
       if (effectiveToken) {
         this.token = effectiveToken;
@@ -1845,7 +1857,9 @@ class App {
 
   async startAutoFarmAllQuests() {
     const activeAcc = (this.accounts || []).find(a => a.isActive);
-    const accToken = activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null;
+    const permAccounts = this.getPermanentAccounts();
+    const permAcc = activeAcc ? permAccounts.find(a => a.id === activeAcc.id || a.userId === activeAcc.userId) : null;
+    const accToken = permAcc?.token || (activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null);
     const effectiveToken = accToken || this.token || localStorage.getItem('discord_user_token');
     if (effectiveToken) {
       this.token = effectiveToken;
