@@ -134,10 +134,14 @@ class TaskManager {
   }
 
   addLog(message, level = 'INFO', meta = null) {
-    const timestamp = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+    const timestamp = new Date().toLocaleTimeString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      hour12: false
+    });
     const logItem = {
       id: uuidv4().slice(0, 8),
       time: timestamp,
+      timestamp: Date.now(),
       level, // INFO, SUCCESS, WARN, ERROR, SCIENCE, DIVERSITY, QUEST, GATEWAY
       message,
       meta
@@ -292,7 +296,7 @@ class TaskManager {
             name: game.name,
             executable: game.executable,
             id: game.id,
-            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+            time: new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false })
           };
           this.diversityTask.recentSpoofed.push(entry);
 
@@ -622,7 +626,7 @@ class TaskManager {
                 name: g.name,
                 executable: g.executable,
                 id: g.id,
-                time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+                time: new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false })
               });
             }
             this.addLog(`⚡ [TURBO DIVERSITY] Đã nạp đợt +${chunk.length} game. Tiến trình: ${this.diversityTask.successCount} / ${this.diversityTask.target} games.`, 'SUCCESS');

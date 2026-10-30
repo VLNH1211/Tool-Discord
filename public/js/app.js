@@ -1992,11 +1992,21 @@ class App {
     this.logs.push(log);
     this.updateLogCount();
 
+    // Prefer log.timestamp formatted in user's browser local timezone (hour12: false), fallback to log.time
+    let displayTime = '';
+    if (log.timestamp) {
+      displayTime = new Date(log.timestamp).toLocaleTimeString('vi-VN', { hour12: false });
+    } else if (log.time) {
+      displayTime = log.time;
+    } else {
+      displayTime = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+    }
+
     const container = document.getElementById('terminalOutput');
     const div = document.createElement('div');
     div.className = 'log-entry';
     div.innerHTML = `
-      <span class="text-[#949ba4] font-mono text-[11px] select-none">[${log.time}]</span>
+      <span class="text-[#949ba4] font-mono text-[11px] select-none">[${displayTime}]</span>
       <span class="log-badge badge-${log.level}">${log.level}</span>
       <span class="flex-1 font-mono text-xs text-[#dbdee1]">${this.escapeHtml(log.message)}</span>
     `;
