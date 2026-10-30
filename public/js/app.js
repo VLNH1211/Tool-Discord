@@ -479,8 +479,23 @@ class App {
       if (curVal) playtimeSelect.value = curVal;
     }
 
+    // Populate Quests account dropdown
+    const questSelect = document.getElementById('questAccountSelect');
+    if (questSelect) {
+      const curVal = questSelect.value;
+      questSelect.innerHTML = '';
+      (this.accounts || []).forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc.id;
+        opt.textContent = `${acc.label || acc.username} (@${acc.username}) ${acc.isActive ? '[👑 Đang cày]' : ''}`;
+        if (acc.isActive) opt.selected = true;
+        questSelect.appendChild(opt);
+      });
+      if (curVal && !questSelect.value) questSelect.value = curVal;
+    }
+
     // Update active labels
-    const activeAcc = this.accounts.find(a => a.isActive);
+    const activeAcc = (this.accounts || []).find(a => a.isActive);
     if (activeAcc) {
       const playtimeUserLabel = document.getElementById('playtimeActiveUserLabel');
       if (playtimeUserLabel) {
@@ -489,6 +504,10 @@ class App {
       const streamerLabel = document.getElementById('streamerActiveUserLabel');
       if (streamerLabel) {
         streamerLabel.textContent = `@${activeAcc.username} (${activeAcc.userId})`;
+      }
+      const questActiveBadge = document.getElementById('questActiveAccountName');
+      if (questActiveBadge) {
+        questActiveBadge.textContent = `@${activeAcc.username} (${activeAcc.userId})`;
       }
     }
   }
@@ -1510,7 +1529,8 @@ class App {
 
     try {
       const activeAcc = (this.accounts || []).find(a => a.isActive);
-      const effectiveToken = this.token || activeAcc?.token || (activeAcc?.userId ? this.getStoredToken(activeAcc.userId) : null) || localStorage.getItem('discord_user_token');
+      const accToken = activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null;
+      const effectiveToken = accToken || this.token || localStorage.getItem('discord_user_token');
       if (effectiveToken) {
         this.token = effectiveToken;
         localStorage.setItem('discord_user_token', effectiveToken);
@@ -1824,6 +1844,14 @@ class App {
   }
 
   async startAutoFarmAllQuests() {
+    const activeAcc = (this.accounts || []).find(a => a.isActive);
+    const accToken = activeAcc ? (this.getStoredToken(activeAcc.userId) || this.getStoredToken(activeAcc.id) || activeAcc.token) : null;
+    const effectiveToken = accToken || this.token || localStorage.getItem('discord_user_token');
+    if (effectiveToken) {
+      this.token = effectiveToken;
+      localStorage.setItem('discord_user_token', effectiveToken);
+    }
+
     if (!this.token) {
       this.openTokenModal();
       return;
@@ -2022,7 +2050,8 @@ class App {
 
         document.querySelectorAll('.subtab-content').forEach(c => c.classList.add('hidden'));
         document.getElementById(target)?.classList.remove('hidden');
-        if (target === 'subtab-quests') {
+        if (target === 'sub-quests' || target === 'subtab-quests') {
+          this.renderAccountsVault();
           this.loadQuests();
         }
       });
@@ -2108,6 +2137,18 @@ class App {
     document.getElementById('btnStopStream')?.addEventListener('click', () => this.stopStream());
 
     // Quests Controls
+    document.getElementById('questAccountSelect')?.addEventListener('change', async (e) => {
+      const accountId = e.target.value;
+      if (!accountId) return;
+      const select = e.target;
+      try {
+        select.disabled = true;
+        this.showToast('Đang chuyển tài khoản và nạp Discord Quests...', 'info');
+        await this.switchAccount(accountId);
+      } finally {
+        select.disabled = false;
+      }
+    });
     document.getElementById('btnRefreshQuests')?.addEventListener('click', () => this.loadQuests());
     document.getElementById('btnAutoFarmAllQuests')?.addEventListener('click', () => this.startAutoFarmAllQuests());
     document.getElementById('btnStopQuestFarm')?.addEventListener('click', () => this.stopQuestFarm());
