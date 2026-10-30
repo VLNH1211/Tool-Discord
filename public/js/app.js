@@ -477,13 +477,13 @@ class App {
           <!-- Profile Body -->
           <div class="px-5 pb-5 pt-0 space-y-4">
             <!-- Avatar & ID Badge Row -->
-            <div class="flex items-center justify-between -mt-10">
+            <div class="flex items-end justify-between -mt-9">
               <div class="relative">
-                <img src="${avatarUrl}" class="w-18 h-18 rounded-2xl border-4 border-[#242629] object-cover shadow-xl bg-[#1e1f22]">
-                <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-[#242629] ${acc.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500'}"></span>
+                <img src="${avatarUrl}" class="w-16 h-16 rounded-2xl border-4 border-[#242629] object-cover shadow-xl bg-[#1e1f22]">
+                <span class="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full border-2 border-[#242629] ${acc.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-500'}"></span>
               </div>
-              <div class="bg-[#1e1f22] border border-[#3f4147] px-3 py-1.5 rounded-xl text-right shadow-sm">
-                <span class="text-[10px] text-[#949ba4] font-mono block uppercase">Discord ID</span>
+              <div class="bg-[#1e1f22] border border-[#3f4147] px-3 py-1.5 rounded-xl text-right shadow-sm mb-0.5">
+                <span class="text-[9px] text-[#949ba4] font-mono block uppercase tracking-wider">Discord ID</span>
                 <span class="text-xs font-mono text-white font-bold tracking-tight">${acc.userId || 'N/A'}</span>
               </div>
             </div>
