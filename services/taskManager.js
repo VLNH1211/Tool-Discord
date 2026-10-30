@@ -1,7 +1,11 @@
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const discordClient = require('./discordClient');
 const detectables = require('./detectables');
 const gateway = require('./gateway');
+
+const PLAYTIME_FILE = path.join(__dirname, '../data/playtime_stats.json');
 
 class TaskManager {
   constructor() {
@@ -21,6 +25,10 @@ class TaskManager {
       diversityJitterMs: 600,
       playtimeIntervalSec: 30
     };
+
+    this.accumulatedPlaytimeSeconds = 0;
+    this.targetPlaytimeHours = 5000;
+    this._loadPlaytimeStats();
 
     this.diversityTask = {
       status: 'idle', // 'idle' | 'running' | 'paused' | 'stopped' | 'completed'
@@ -106,6 +114,10 @@ class TaskManager {
     }
   }
 
+  broadcastEvent(event, data) {
+    this.broadcastSSE(event, data);
+  }
+
   sendSSE(client, event, data) {
     try {
       client.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -145,14 +157,17 @@ class TaskManager {
     this.user.analyticsToken = analyticsToken;
     this.user.profile = profile;
 
+    this._loadPlaytimeStats();
+
     if (this.settings.enableGatewayPresence && token) {
       gateway.connect(token);
     }
 
     this.broadcastSSE('user_update', {
-      user: this.user.profile,
-      hasAnalyticsToken: Boolean(this.user.analyticsToken)
+      user: profile,
+      hasAnalyticsToken: Boolean(analyticsToken)
     });
+    this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
   }
 
   updateSettings(newSettings) {
@@ -326,6 +341,53 @@ class TaskManager {
 
   // --- PLAYTIME HOURS AFK BOOSTER ---
 
+  _loadPlaytimeStats() {
+    try {
+      if (fs.existsSync(PLAYTIME_FILE)) {
+        const raw = fs.readFileSync(PLAYTIME_FILE, 'utf8');
+        const data = JSON.parse(raw);
+        const currentId = this.user.profile?.id || 'default';
+        const userStats = data.accounts?.[currentId] || data;
+        this.accumulatedPlaytimeSeconds = userStats.accumulatedSeconds || 0;
+        this.targetPlaytimeHours = userStats.targetHours || 5000;
+      }
+    } catch (e) {
+      this.accumulatedPlaytimeSeconds = 0;
+      this.targetPlaytimeHours = 5000;
+    }
+  }
+
+  _savePlaytimeStats() {
+    try {
+      fs.mkdirSync(path.dirname(PLAYTIME_FILE), { recursive: true });
+      const currentId = this.user.profile?.id || 'default';
+      const currentUsername = this.user.profile?.username || 'user';
+
+      let data = {};
+      if (fs.existsSync(PLAYTIME_FILE)) {
+        try {
+          data = JSON.parse(fs.readFileSync(PLAYTIME_FILE, 'utf8'));
+        } catch (e) {}
+      }
+      if (!data.accounts) data.accounts = {};
+
+      const currentTotalSeconds = this.accumulatedPlaytimeSeconds + (this.playtimeTask.status === 'running' ? this.playtimeTask.elapsedSeconds : 0);
+
+      data.accounts[currentId] = {
+        username: currentUsername,
+        accumulatedSeconds: currentTotalSeconds,
+        targetHours: this.targetPlaytimeHours,
+        lastUpdated: new Date().toISOString()
+      };
+      data.accumulatedSeconds = currentTotalSeconds;
+      data.targetHours = this.targetPlaytimeHours;
+
+      fs.writeFileSync(PLAYTIME_FILE, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+      // ignore
+    }
+  }
+
   getPlaytimeStatus() {
     return {
       status: this.playtimeTask.status,
@@ -334,18 +396,25 @@ class TaskManager {
       sequence: this.playtimeTask.sequence,
       totalHeartbeats: this.playtimeTask.totalHeartbeats,
       elapsedSeconds: this.playtimeTask.elapsedSeconds,
+      accumulatedSeconds: this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds,
+      targetHours: this.targetPlaytimeHours,
       startedAt: this.playtimeTask.startedAt,
       intervalSec: this.playtimeTask.intervalSec
     };
   }
 
-  async startPlaytime({ gameId, gameName, executable, intervalSec = 30 }) {
+  async startPlaytime({ gameId, gameName, executable, intervalSec = 30, targetHours = 5000 }) {
     if (!this.user.token || !this.user.analyticsToken) {
       throw new Error('Chưa đăng nhập Discord Token hoặc thiếu Analytics Token!');
     }
 
     if (this.playtimeTask.status === 'running') {
       throw new Error('Tiến trình Playtime Booster đang hoạt động!');
+    }
+
+    if (targetHours) {
+      this.targetPlaytimeHours = parseInt(targetHours) || 5000;
+      this._savePlaytimeStats();
     }
 
     const game = {
@@ -413,6 +482,9 @@ class TaskManager {
           `⏱ [Playtime] Heartbeat #${this.playtimeTask.totalHeartbeats} cho "${this.playtimeTask.game.name}" thành công (Đã cày: ${mins}m ${secs}s).`,
           'SCIENCE'
         );
+        if (this.playtimeTask.totalHeartbeats % 5 === 0) {
+          this._savePlaytimeStats();
+        }
       } else {
         this.addLog(`⚠️ Playtime heartbeat cảnh báo: ${result.message}`, 'WARN');
       }
@@ -434,7 +506,9 @@ class TaskManager {
     const hours = (totalSecs / 3600).toFixed(2);
 
     this.playtimeTask.status = 'stopped';
-    this.addLog(`⏹ Đã dừng AFK Playtime cho "${gameName}". Tổng thời gian đã cày: ${hours} giờ (${totalSecs}s).`, 'WARN');
+    this.accumulatedPlaytimeSeconds += this.playtimeTask.elapsedSeconds;
+    this._savePlaytimeStats();
+    this.addLog(`⏹ Đã dừng AFK Playtime cho "${gameName}". Tổng thời gian phiên: ${hours} giờ (${totalSecs}s). Tổng tích lũy: ${(this.accumulatedPlaytimeSeconds / 3600).toFixed(2)} giờ.`, 'WARN');
     this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
 
     if (this.settings.enableGatewayPresence) {

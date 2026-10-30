@@ -54,11 +54,16 @@
       </div>
 
       <!-- Right Action & Profile Area -->
-      <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-3">
         <!-- Live SSE Status Indicator -->
         <div id="sseStatusBadge" class="hidden sm:flex items-center space-x-2 text-xs bg-[#1e1f22] px-3 py-1.5 rounded-full border border-[#3f4147]">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-indicator"></span>
           <span id="sseStatusText" class="text-emerald-400 font-mono">Đã kết nối SSE</span>
+        </div>
+
+        <!-- Quick Dual-Account Switcher (Navbar) -->
+        <div id="navAccountSwitcher" class="hidden md:flex items-center space-x-1.5 bg-[#1e1f22] p-1 rounded-xl border border-[#3f4147]">
+          <!-- Rendered dynamically by app.js -->
         </div>
 
         <!-- User Profile Pill (Dynamic) -->
@@ -105,8 +110,8 @@
         </button>
 
         <button data-tab="tab-security" class="tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap">
-          <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-          <span>6. Bảo Mật & Đa Tài Khoản</span>
+          <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          <span>6. Quản Lý Tài Khoản</span>
         </button>
       </div>
 
@@ -174,22 +179,74 @@
 
         <!-- Subtab 2: Playtime Hours -->
         <div id="sub-playtime" class="subtab-content hidden space-y-5">
-          <div class="bg-[#313338] p-5 rounded-xl border border-[#3f4147]">
-            <h2 class="text-base font-bold text-white flex items-center space-x-2">
-              <span>AFK Playtime Hours Booster (Mục tiêu 5.000+ Giờ)</span>
-              <span class="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-xs px-2.5 py-0.5 rounded-full font-normal">Huy hiệu Vĩnh cửu</span>
-            </h2>
-            <p class="text-xs text-[#949ba4] mt-1">Duy trì gửi tín hiệu chạy game liên tục để cộng dồn số giờ chơi cho hồ sơ Discord.</p>
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#313338] p-5 rounded-xl border border-[#3f4147]">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                <span>AFK Playtime Hours Booster (Mục tiêu 5.000+ Giờ)</span>
+                <span class="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-xs px-2.5 py-0.5 rounded-full font-normal">Huy hiệu Vĩnh cửu</span>
+              </h2>
+              <p class="text-xs text-[#949ba4] mt-1">Duy trì gửi tín hiệu chạy game liên tục để cộng dồn số giờ chơi cho hồ sơ Discord. Chạy ngầm 24/7 độc lập trên máy chủ Cloud Render.</p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs text-[#949ba4]">Mục tiêu:</span>
+              <button class="playtime-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-2.5 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono" data-hours="150">150h</button>
+              <button class="playtime-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-2.5 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono" data-hours="300">300h</button>
+              <button class="playtime-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-2.5 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono" data-hours="500">500h</button>
+              <button class="playtime-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-2.5 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono" data-hours="1000">1.000h</button>
+              <button class="playtime-target-btn bg-[#5865f2] text-white text-xs px-3 py-1.5 rounded-lg border border-indigo-400 font-bold font-mono" data-hours="5000">5.000h (Max)</button>
+            </div>
+          </div>
+
+          <!-- 5000h Milestone Progress Bar -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-white">
+                Tiến trình tích lũy: <strong id="playtimeAccumulatedText" class="text-emerald-400 font-mono text-sm">0.0 / 5,000.0 Giờ (0.00%)</strong>
+              </span>
+              <div class="flex items-center space-x-2">
+                <span id="playtimeCloudBadge" class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span>Cloud 24/7 Standby</span>
+                </span>
+                <span id="playtimeStateBadge" class="text-xs font-mono px-2.5 py-0.5 rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">Sẵn sàng</span>
+              </div>
+            </div>
+            <div class="w-full bg-[#1e1f22] h-4 rounded-full overflow-hidden p-0.5 border border-[#3f4147]">
+              <div id="playtimeProgressBar" class="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between text-[11px] text-[#949ba4]">
+              <span>Tài khoản đang farm: <strong id="playtimeActiveUserLabel" class="text-indigo-300 font-mono">Đang tải...</strong></span>
+              <span>Tổng gói Telemetry gửi thành công: <strong id="playtimeHeartbeatCounter" class="text-white font-mono">0</strong></span>
+            </div>
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <div class="space-y-3">
-              <span class="text-xs font-bold text-white uppercase">Chọn game nhanh:</span>
-              <div class="flex flex-wrap gap-2" id="playtimePresetContainer"></div>
+            <div class="space-y-4">
+              <div>
+                <span class="text-xs font-bold text-white uppercase block mb-1.5">Chọn game nhanh (Hot Presets):</span>
+                <div class="flex flex-wrap gap-2" id="playtimePresetContainer"></div>
+              </div>
               <div class="pt-2">
                 <label class="block text-xs font-semibold text-[#949ba4] mb-1">Tìm kiếm trong 24.000+ game Discord:</label>
-                <input type="text" id="playtimeSearchInput" placeholder="Gõ tên game (Cyberpunk, CS2, Valorant...)" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#5865f2]">
+                <input type="text" id="playtimeSearchInput" placeholder="Gõ tên game (Cyberpunk, CS2, Valorant, GTA V...)" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#5865f2]">
                 <div id="playtimeSearchResults" class="hidden mt-1 bg-[#2b2d31] border border-[#3f4147] rounded-lg shadow-xl max-h-48 overflow-y-auto z-20 divide-y divide-[#383a40]"></div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label class="block text-xs font-semibold text-[#949ba4] mb-1">Tần suất gửi tín hiệu:</label>
+                  <select id="playtimeIntervalSelect" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#5865f2]">
+                    <option value="15">15 giây (Nhanh)</option>
+                    <option value="30" selected>30 giây (Chuẩn - Khuyên dùng)</option>
+                    <option value="60">60 giây (Tiết kiệm)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-[#949ba4] mb-1">Đổi tài khoản cày:</label>
+                  <select id="playtimeAccountSelect" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#5865f2]">
+                    <option value="">-- Tài khoản hiện tại --</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -199,13 +256,22 @@
                 <div id="playtimeSelectedGameTitle" class="text-lg font-black text-white mt-1">Counter-Strike 2</div>
                 <div id="playtimeSelectedGameDetails" class="text-xs text-[#949ba4] font-mono">ID: 730 | cs2.exe</div>
               </div>
-              <div class="bg-[#1e1f22] p-4 rounded-xl border border-[#3f4147] text-center">
-                <div class="text-xs text-[#949ba4]">Thời gian đã cày:</div>
-                <div id="playtimeBigTimer" class="text-3xl font-black text-emerald-400 font-mono tracking-wider">00:00:00</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-[#1e1f22] p-4 rounded-xl border border-[#3f4147] text-center">
+                  <div class="text-[11px] text-[#949ba4]">Phiên hiện tại:</div>
+                  <div id="playtimeBigTimer" class="text-2xl font-black text-emerald-400 font-mono tracking-wider mt-1">00:00:00</div>
+                </div>
+                <div class="bg-[#1e1f22] p-4 rounded-xl border border-[#3f4147] text-center">
+                  <div class="text-[11px] text-[#949ba4]">Tổng giờ tích lũy:</div>
+                  <div id="playtimeTotalHoursDisplay" class="text-2xl font-black text-indigo-400 font-mono tracking-wider mt-1">0.0h</div>
+                </div>
               </div>
               <div class="flex items-center space-x-2">
-                <button id="btnStartPlaytime" class="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white py-2 rounded-lg font-bold text-xs shadow-md">Bắt đầu AFK Farm</button>
-                <button id="btnStopPlaytime" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#313338] text-red-400 px-4 py-2 rounded-lg text-xs font-semibold border border-[#3f4147]">Dừng</button>
+                <button id="btnStartPlaytime" class="flex-1 bg-[#5865f2] hover:bg-[#4752c4] text-white py-2.5 rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <span>Bắt đầu AFK Farm 5.000 Giờ</span>
+                </button>
+                <button id="btnStopPlaytime" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#313338] hover:bg-[#383a40] text-red-400 px-5 py-2.5 rounded-lg text-xs font-bold border border-[#3f4147] transition-all">Dừng</button>
               </div>
             </div>
           </div>
@@ -243,7 +309,7 @@
                   <label class="text-[#949ba4] font-medium block mb-1">
                     Voice Channel ID (ID Kênh thoại) <span class="text-red-400">*</span>
                   </label>
-                  <input type="text" id="streamChannelId" placeholder="Ví dụ: 112233445566778899" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white font-mono focus:border-indigo-500 focus:outline-none">
+                  <input type="text" id="streamChannelId" placeholder="Ví dụ: 1111898368931790892" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white font-mono focus:border-indigo-500 focus:outline-none">
                   <span class="text-[10px] text-[#949ba4] mt-1 block">Bấm chuột phải vào Kênh thoại trên Discord -> Copy Channel ID</span>
                 </div>
 
@@ -261,11 +327,10 @@
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2 border-t border-[#383a40]">
                 <div>
-                  <label class="text-[#949ba4] font-medium block mb-1">Chất lượng luồng video:</label>
-                  <select id="streamResolution" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white">
-                    <option value="720p" selected>640x360 15 FPS (Siêu tiết kiệm CPU & Băng thông - Khuyên dùng)</option>
-                    <option value="720p">720p 30 FPS (Chuẩn)</option>
-                    <option value="1080p">1080p 30 FPS</option>
+                  <label class="text-[#949ba4] font-medium block mb-1">Chế độ kết nối:</label>
+                  <select id="streamConnectionMode" class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white">
+                    <option value="cloud" selected>☁️ Chế độ Cloud 24/7 (Gateway Voice - Chạy 100% mượt trên Render)</option>
+                    <option value="desktop">🖥️ Chế độ Desktop (WebRTC Video RTP FFmpeg)</option>
                   </select>
                 </div>
                 <div>
@@ -283,6 +348,10 @@
                   <span>Bắt đầu Treo Stream 24/7 (Headless)</span>
                 </button>
                 <button id="btnStopStream" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#da373c] hover:bg-[#c02e33] text-white px-5 py-2.5 rounded-lg font-bold text-xs shadow-md transition-all">
+                  Dừng Stream
+                </button>
+              </div>
+            </div>
                   Dừng Stream
                 </button>
               </div>
@@ -609,23 +678,44 @@
       </div>
 
       <!-- ========================================== -->
-      <!-- TAB 6: BẢO MẬT & ĐA TÀI KHOẢN (SECURITY & VAULT) -->
+      <!-- TAB 6: TRUNG TÂM QUẢN LÝ TÀI KHOẢN & BẢO MẬT -->
       <!-- ========================================== -->
       <div id="tab-security" class="tab-content hidden p-6 space-y-6">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <!-- Multi-Account Vault -->
-          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="text-sm font-bold text-white flex items-center space-x-2">
-                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                <span>Kho Đa Tài Khoản (Account Vault)</span>
-              </h3>
-              <button onclick="window.discordApp?.openTokenModal()" class="bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs px-3 py-1 rounded-lg font-bold">+ Thêm Tài Khoản</button>
-            </div>
-            <p class="text-xs text-[#949ba4]">Chuyển đổi tức thì giữa các tài khoản Discord mà không cần nhập lại mã 2FA hay đăng xuất.</p>
-            <div id="vaultAccountsList" class="space-y-2 max-h-56 overflow-y-auto"></div>
+        <!-- Dual Account Hub Header -->
+        <div class="bg-[#313338] p-5 rounded-xl border border-[#3f4147] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+              <span>Trung Tâm Quản Lý Đa Tài Khoản (Discord Multi-Account Center)</span>
+            </h2>
+            <p class="text-xs text-[#949ba4] mt-1">
+              Quản lý song song tài khoản chính và phụ. Chuyển đổi 1 chạm, phân vai trò Streamer / Viewer tự động, đồng bộ bền vững giữa trình duyệt và Cloud Render 24/7.
+            </p>
           </div>
+          <div class="flex items-center space-x-2.5">
+            <button onclick="window.discordApp?.openTokenModal()" class="bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs px-4 py-2 rounded-xl font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <span>+ Thêm Tài Khoản</span>
+            </button>
+            <button onclick="window.discordApp?.syncAccountsWithServer()" class="bg-[#242629] hover:bg-[#383a40] text-emerald-400 border border-[#3f4147] text-xs px-3.5 py-2 rounded-xl font-mono transition-all flex items-center space-x-1.5 cursor-pointer" title="Đồng bộ ngay với Cloud Render">
+              <span>↻ Đồng Bộ Cloud</span>
+            </button>
+          </div>
+        </div>
 
+        <!-- Accounts Grid Cards Container -->
+        <div id="vaultAccountsCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <!-- Dynamically populated by app.js renderAccountsVault() -->
+          <div class="col-span-full text-center py-10 text-xs text-[#949ba4] bg-[#242629] rounded-xl border border-[#383a40]">
+            Đang tải dữ liệu tài khoản...
+          </div>
+        </div>
+
+        <!-- Hidden container kept for backward compatibility if scripts query it -->
+        <div id="vaultAccountsList" class="hidden"></div>
+
+        <!-- Secondary Security Grid: OAuth2 & Sessions -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
           <!-- Authorized OAuth2 Apps Cleaner -->
           <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
             <div class="flex items-center justify-between">
@@ -640,19 +730,19 @@
               <div class="text-center py-6 text-xs text-[#949ba4]">Nhấn "Quét Apps" để kiểm tra các ứng dụng được cấp quyền.</div>
             </div>
           </div>
-        </div>
 
-        <!-- Active Sessions / Devices Inspector -->
-        <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
-              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-              <span>Thiết Bị & Phiên Đăng Nhập Đang Hoạt Động (Active Sessions)</span>
-            </h3>
-            <button id="btnRefreshSessions" class="bg-[#313338] text-xs px-2.5 py-1 rounded border border-[#3f4147]">↻ Quét Thiết Bị</button>
-          </div>
-          <div id="activeSessionsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div class="col-span-full text-center py-6 text-xs text-[#949ba4]">Nhấn "Quét Thiết Bị" để kiểm tra các phiên đăng nhập.</div>
+          <!-- Active Sessions / Devices Inspector -->
+          <div class="bg-[#242629] p-5 rounded-xl border border-[#383a40] space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                <span>Thiết Bị & Phiên Đăng Nhập Đang Hoạt Động (Active Sessions)</span>
+              </h3>
+              <button id="btnRefreshSessions" class="bg-[#313338] text-xs px-2.5 py-1 rounded border border-[#3f4147]">↻ Quét Thiết Bị</button>
+            </div>
+            <div id="activeSessionsList" class="space-y-2 max-h-56 overflow-y-auto">
+              <div class="text-center py-6 text-xs text-[#949ba4]">Nhấn "Quét Thiết Bị" để kiểm tra các phiên đăng nhập.</div>
+            </div>
           </div>
         </div>
       </div>

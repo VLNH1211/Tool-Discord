@@ -320,6 +320,45 @@ class DiscordGatewayManager {
     }
   }
 
+  // --- GATEWAY VOICE PRESENCE (OPCODE 4) ---
+  joinVoiceChannel(guildId, channelId, selfMute = false, selfDeaf = false, selfVideo = false) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('Chưa kết nối Gateway Discord!');
+    }
+    const payload = {
+      op: 4,
+      d: {
+        guild_id: guildId || null,
+        channel_id: channelId,
+        self_mute: Boolean(selfMute),
+        self_deaf: Boolean(selfDeaf),
+        self_video: Boolean(selfVideo)
+      }
+    };
+    this.ws.send(JSON.stringify(payload));
+    this.voiceState = { guildId, channelId, selfMute, selfDeaf, selfVideo };
+    this.log(`✅ [Voice Gateway] Đã gửi lệnh vào phòng thoại [${channelId}] (Camera/Screen: ${selfVideo ? 'BẬT' : 'TẮT'})`, 'SUCCESS');
+    return { success: true, voiceState: this.voiceState };
+  }
+
+  leaveVoiceChannel(guildId) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const payload = {
+      op: 4,
+      d: {
+        guild_id: guildId || null,
+        channel_id: null,
+        self_mute: false,
+        self_deaf: false,
+        self_video: false
+      }
+    };
+    this.ws.send(JSON.stringify(payload));
+    this.voiceState = null;
+    this.log(`[Voice Gateway] Đã rời phòng thoại.`, 'INFO');
+    return { success: true };
+  }
+
   disconnect() {
     this.clearHeartbeat();
     if (this.ws) {

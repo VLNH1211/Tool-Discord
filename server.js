@@ -136,6 +136,34 @@ app.post('/api/accounts/add', async (req, res) => {
   }
 });
 
+app.post('/api/accounts/sync-all', async (req, res) => {
+  try {
+    const { accounts } = req.body;
+    if (!Array.isArray(accounts)) {
+      return res.status(400).json({ success: false, message: 'Danh sách tài khoản không hợp lệ.' });
+    }
+    for (const item of accounts) {
+      if (!item.token) continue;
+      const cleanToken = String(item.token).trim();
+      const existing = accountVault.accounts.find(a => a.token === cleanToken || (item.userId && a.userId === item.userId));
+      if (!existing) {
+        let profile = item.profile || (item.userId ? { id: item.userId, username: item.username, global_name: item.global_name, avatar: item.avatar, email: item.email, phone: item.phone, verified: item.verified } : null);
+        const check = await discordClient.getCurrentUser(cleanToken);
+        if (check.success) {
+          profile = check.data;
+        }
+        if (profile) {
+          accountVault.addOrUpdateAccount(cleanToken, profile, item.label || profile.username, Boolean(item.isActive && !accountVault.getActiveAccount()));
+        }
+      }
+    }
+    taskManager.broadcastEvent('accounts_update', accountVault.getAccounts());
+    res.json({ success: true, accounts: accountVault.getAccounts() });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.post('/api/accounts/switch', async (req, res) => {
   const { accountId } = req.body;
   const acc = accountVault.setActiveAccount(accountId);
@@ -220,6 +248,30 @@ app.post('/api/presence/clear', (req, res) => {
   res.json({ success: true });
 });
 
+// --- GATEWAY VOICE PRESENCE (OPCODE 4 JOIN/LEAVE) ---
+app.post('/api/gateway/voice/join', (req, res) => {
+  try {
+    const { guildId, channelId, selfMute, selfDeaf, selfVideo } = req.body;
+    if (!channelId) {
+      return res.status(400).json({ success: false, message: 'Thiếu channelId!' });
+    }
+    const result = gateway.joinVoiceChannel(guildId, channelId, selfMute, selfDeaf, selfVideo);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/gateway/voice/leave', (req, res) => {
+  try {
+    const { guildId } = req.body;
+    const result = gateway.leaveVoiceChannel(guildId);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 // --- AFK AUTO RESPONDER ---
 app.get('/api/auto-responder', (req, res) => {
   res.json({ success: true, settings: gateway.getAutoResponderSettings() });
@@ -252,7 +304,7 @@ app.get('/api/stream/status', (req, res) => {
 
 app.post('/api/stream/start', async (req, res) => {
   try {
-    let { streamerToken, viewerToken, guildId, channelId, resolution, fps } = req.body;
+    let { streamerToken, viewerToken, guildId, channelId, resolution, fps, mode } = req.body;
     if (!streamerToken) {
       streamerToken = taskManager.user.token;
     }
@@ -268,7 +320,8 @@ app.post('/api/stream/start', async (req, res) => {
       guildId,
       channelId,
       resolution,
-      fps
+      fps,
+      mode: mode || 'cloud'
     });
     res.json(result);
   } catch (error) {
@@ -435,12 +488,13 @@ app.post('/api/diversity/stop', (req, res) => {
 // --- PLAYTIME HOURS BOOSTER ---
 app.post('/api/playtime/start', async (req, res) => {
   try {
-    const { gameId, gameName, executable, intervalSec } = req.body;
+    const { gameId, gameName, executable, intervalSec, targetHours } = req.body;
     const result = await taskManager.startPlaytime({
       gameId,
       gameName,
       executable,
-      intervalSec
+      intervalSec,
+      targetHours
     });
     res.json(result);
   } catch (error) {

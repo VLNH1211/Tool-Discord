@@ -27,6 +27,7 @@ class App {
     this.setupEventListeners();
     this.initSSE();
     this.loadPresets();
+    await this.syncAccountsWithServer();
 
     if (this.token) {
       await this.login(this.token, false);
@@ -293,66 +294,295 @@ class App {
     }
   }
 
+  async syncAccountsWithServer() {
+    try {
+      // 1. Fetch current server accounts
+      const res = await fetch('/api/accounts');
+      const data = await res.json();
+      let serverAccounts = data.accounts || [];
+
+      // 2. Read stored accounts from localStorage
+      let localAccounts = [];
+      try {
+        const stored = localStorage.getItem('discord_vault_accounts');
+        if (stored) localAccounts = JSON.parse(stored);
+      } catch (e) {}
+
+      // If localStorage has accounts not on server, sync them to server
+      if (localAccounts.length > 0) {
+        const missingOnServer = localAccounts.filter(la => 
+          !serverAccounts.some(sa => sa.userId === la.userId || (la.token && sa.token === la.token))
+        );
+        if (missingOnServer.length > 0) {
+          const syncRes = await fetch('/api/accounts/sync-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accounts: localAccounts })
+          });
+          const syncData = await syncRes.json();
+          if (syncData.success && syncData.accounts) {
+            serverAccounts = syncData.accounts;
+          }
+        }
+      }
+
+      this.accounts = serverAccounts;
+      this.saveAccountsToStorage();
+      this.renderAccountsVault();
+    } catch (e) {
+      console.warn('Sync accounts error:', e);
+    }
+  }
+
+  saveAccountsToStorage() {
+    try {
+      if (Array.isArray(this.accounts)) {
+        localStorage.setItem('discord_vault_accounts', JSON.stringify(this.accounts));
+      }
+    } catch (e) {}
+  }
+
   renderAccountsVault() {
-    const list = document.getElementById('vaultAccountsList');
-    if (!list) return;
+    this.saveAccountsToStorage();
+    this.renderNavbarAccountSwitcher();
+    this.renderAccountCards();
+
+    // Populate Stream viewer dropdown
+    const viewerSelect = document.getElementById('streamViewerAccountSelect');
+    if (viewerSelect) {
+      const curVal = viewerSelect.value;
+      viewerSelect.innerHTML = '<option value="">-- Chọn từ Két tài khoản hoặc tự vào phòng --</option>';
+      (this.accounts || []).forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc.id;
+        opt.textContent = `${acc.label || acc.username} (@${acc.username}) ${acc.isActive ? '[👑 Chính]' : '[👤 Phụ]'}`;
+        viewerSelect.appendChild(opt);
+      });
+      if (curVal) viewerSelect.value = curVal;
+    }
+
+    // Populate Playtime account dropdown
+    const playtimeSelect = document.getElementById('playtimeAccountSelect');
+    if (playtimeSelect) {
+      const curVal = playtimeSelect.value;
+      playtimeSelect.innerHTML = '';
+      (this.accounts || []).forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc.id;
+        opt.textContent = `${acc.label || acc.username} (@${acc.username}) ${acc.isActive ? '[👑 Đang chọn]' : ''}`;
+        if (acc.isActive) opt.selected = true;
+        playtimeSelect.appendChild(opt);
+      });
+      if (curVal) playtimeSelect.value = curVal;
+    }
+
+    // Update active labels
+    const activeAcc = this.accounts.find(a => a.isActive);
+    if (activeAcc) {
+      const playtimeUserLabel = document.getElementById('playtimeActiveUserLabel');
+      if (playtimeUserLabel) {
+        playtimeUserLabel.textContent = `@${activeAcc.username} (${activeAcc.userId})`;
+      }
+      const streamerLabel = document.getElementById('streamerActiveUserLabel');
+      if (streamerLabel) {
+        streamerLabel.textContent = `@${activeAcc.username} (${activeAcc.userId})`;
+      }
+    }
+  }
+
+  renderNavbarAccountSwitcher() {
+    const nav = document.getElementById('navAccountSwitcher');
+    if (!nav) return;
 
     if (!this.accounts || this.accounts.length === 0) {
-      list.innerHTML = `<div class="text-center py-6 text-xs text-[#949ba4]">Chưa lưu tài khoản nào trong Vault.</div>`;
+      nav.innerHTML = `
+        <span class="text-[11px] text-[#949ba4] px-2 py-0.5 font-mono">0 tài khoản</span>
+      `;
       return;
     }
 
-    list.innerHTML = this.accounts.map(acc => {
+    nav.innerHTML = `
+      <div class="flex items-center space-x-1.5">
+        ${this.accounts.map(acc => {
+          const avatarUrl = acc.avatar
+            ? `https://cdn.discordapp.com/avatars/${acc.userId}/${acc.avatar}.png?size=32`
+            : 'https://cdn.discordapp.com/embed/avatars/0.png';
+          return `
+            <button class="nav-account-btn flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              acc.isActive 
+                ? 'bg-[#5865f2] text-white shadow-sm ring-1 ring-indigo-300/40' 
+                : 'bg-[#2b2d31] hover:bg-[#383a40] text-[#949ba4] hover:text-white'
+            }" data-id="${acc.id}" title="Chuyển sang @${this.escapeHtml(acc.username)}">
+              <img src="${avatarUrl}" class="w-4 h-4 rounded-full object-cover">
+              <span class="max-w-[70px] truncate">${this.escapeHtml(acc.username)}</span>
+              ${acc.isActive ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>' : ''}
+            </button>
+          `;
+        }).join('')}
+        <button onclick="window.discordApp?.openTokenModal()" class="text-xs px-2 py-1 text-[#949ba4] hover:text-white hover:bg-[#2b2d31] rounded-lg transition-all" title="Thêm tài khoản khác">+</button>
+      </div>
+    `;
+
+    nav.querySelectorAll('.nav-account-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const currentActive = this.accounts.find(a => a.isActive);
+        if (currentActive && currentActive.id === id) return;
+        this.switchAccount(id);
+      });
+    });
+  }
+
+  renderAccountCards() {
+    const container = document.getElementById('vaultAccountsCards');
+    if (!container) return;
+
+    if (!this.accounts || this.accounts.length === 0) {
+      container.innerHTML = `
+        <div class="col-span-full bg-[#242629] p-8 rounded-2xl border border-dashed border-[#3f4147] text-center space-y-3">
+          <div class="w-12 h-12 mx-auto rounded-full bg-[#1e1f22] flex items-center justify-center text-[#949ba4]">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          </div>
+          <h4 class="text-sm font-bold text-white">Chưa có tài khoản nào được kết nối</h4>
+          <p class="text-xs text-[#949ba4] max-w-sm mx-auto">Thêm tài khoản chính và tài khoản phụ để bắt đầu điều khiển và cày 5.000 giờ tự động.</p>
+          <button onclick="window.discordApp?.openTokenModal()" class="bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs px-4 py-2 rounded-xl font-bold shadow-md transition-all">
+            + Thêm Tài Khoản Đầu Tiên
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = this.accounts.map(acc => {
       const avatarUrl = acc.avatar
-        ? `https://cdn.discordapp.com/avatars/${acc.userId}/${acc.avatar}.png?size=64`
+        ? `https://cdn.discordapp.com/avatars/${acc.userId}/${acc.avatar}.png?size=128`
         : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
+      const isVerified = acc.verified !== false;
+      const emailDisplay = acc.email || 'Chưa cung cấp';
+      const phoneDisplay = acc.phone || 'Chưa liên kết SĐT';
+
       return `
-        <div class="flex items-center justify-between bg-[#1e1f22] p-2.5 rounded-xl border ${acc.isActive ? 'border-[#5865f2] bg-[#5865f2]/5' : 'border-[#383a40]'} transition-all">
-          <div class="flex items-center space-x-3">
-            <img src="${avatarUrl}" class="w-8 h-8 rounded-full border border-gray-600 object-cover">
-            <div>
-              <div class="flex items-center space-x-1.5">
-                <span class="text-xs font-bold text-white">${this.escapeHtml(acc.label)}</span>
-                ${acc.isActive ? '<span class="bg-emerald-500/20 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">Active</span>' : ''}
-              </div>
-              <div class="text-[11px] text-[#949ba4] font-mono">@${this.escapeHtml(acc.username)} • ID: ${acc.userId}</div>
-            </div>
-          </div>
-          <div class="flex items-center space-x-2">
-            ${!acc.isActive ? `
-              <button class="btn-switch-account bg-[#313338] hover:bg-[#5865f2] text-white px-2.5 py-1 rounded text-xs font-semibold transition-all" data-id="${acc.id}">
-                Chuyển
-              </button>
-            ` : ''}
-            <button class="btn-del-account text-[#949ba4] hover:text-red-400 p-1" data-id="${acc.id}" title="Xóa khỏi Vault">
+        <div class="bg-[#242629] rounded-2xl border ${acc.isActive ? 'border-[#5865f2] shadow-lg shadow-indigo-500/10' : 'border-[#383a40]'} overflow-hidden flex flex-col justify-between transition-all hover:border-[#5865f2]/50">
+          <!-- Card Header & Banner -->
+          <div class="h-16 bg-gradient-to-r ${acc.isActive ? 'from-indigo-600 via-indigo-500 to-purple-600' : 'from-[#1e1f22] to-[#2b2d31]'} p-3 flex items-start justify-between relative">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${acc.isActive ? 'bg-emerald-500 text-white font-mono shadow' : 'bg-black/40 text-gray-300 font-mono'}">
+              ${acc.isActive ? '👑 TÀI KHOẢN CHÍNH' : '👤 TÀI KHOẢN PHỤ (CLONE)'}
+            </span>
+            <button class="btn-del-account bg-black/30 hover:bg-rose-600/80 text-gray-300 hover:text-white p-1 rounded-lg transition-colors cursor-pointer" data-id="${acc.id}" title="Xóa tài khoản khỏi danh sách">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
+          </div>
+
+          <!-- Avatar & Identity Info -->
+          <div class="px-5 pb-5 pt-0 -mt-8 space-y-4">
+            <div class="flex items-end justify-between">
+              <div class="relative">
+                <img src="${avatarUrl}" class="w-16 h-16 rounded-2xl border-4 border-[#242629] object-cover shadow-md bg-[#1e1f22]">
+                <span class="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full border-2 border-[#242629] ${acc.isActive ? 'bg-emerald-500' : 'bg-gray-500'}"></span>
+              </div>
+              <div class="text-right">
+                <span class="text-[11px] text-[#949ba4] font-mono block">Discord ID:</span>
+                <span class="text-xs font-mono text-white font-bold tracking-tight">${acc.userId || 'N/A'}</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center space-x-1.5">
+                <h3 class="text-base font-black text-white truncate">${this.escapeHtml(acc.global_name || acc.username)}</h3>
+              </div>
+              <div class="text-xs text-indigo-400 font-mono">@${this.escapeHtml(acc.username)}</div>
+            </div>
+
+            <!-- Email & Verification Badge -->
+            <div class="space-y-1.5 text-[11px] pt-1 border-t border-[#383a40]">
+              <div class="flex items-center justify-between">
+                <span class="text-[#949ba4]">Hộp thư Email:</span>
+                <span class="font-mono text-white max-w-[170px] truncate" title="${this.escapeHtml(emailDisplay)}">${this.escapeHtml(emailDisplay)}</span>
+              </div>
+              
+              <div>
+                ${isVerified 
+                  ? `<div class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center space-x-1.5 font-medium">
+                      <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                      <span>Email đã xác thực (Mở đầy đủ tính năng)</span>
+                    </div>` 
+                  : `<div class="bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-start space-x-1.5">
+                      <svg class="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                      <span>Vui lòng vào Gmail bấm xác thực để mở WebSocket Gateway!</span>
+                    </div>`
+                }
+              </div>
+
+              <div class="flex items-center justify-between text-[11px] pt-1">
+                <span class="text-[#949ba4]">Số điện thoại:</span>
+                <span class="font-mono text-gray-300">${this.escapeHtml(phoneDisplay)}</span>
+              </div>
+            </div>
+
+            <!-- Card Actions -->
+            <div class="pt-3 border-t border-[#383a40] space-y-2">
+              ${!acc.isActive ? `
+                <button class="btn-card-switch w-full bg-[#5865f2] hover:bg-[#4752c4] text-white py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-1.5 cursor-pointer" data-id="${acc.id}">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                  <span>Kích hoạt làm Tài khoản chính</span>
+                </button>
+              ` : `
+                <div class="w-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 py-1.5 rounded-xl text-xs font-bold text-center font-mono">
+                  ✓ ĐANG ĐIỀU KHIỂN CHÍNH
+                </div>
+              `}
+              
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <button class="btn-card-farm bg-[#1e1f22] hover:bg-[#383a40] text-indigo-300 hover:text-white py-1.5 px-2 rounded-lg border border-[#3f4147] transition-all font-semibold flex items-center justify-center space-x-1" data-id="${acc.id}">
+                  <span>⏳ Cày 5000h</span>
+                </button>
+                <button class="btn-card-viewer bg-[#1e1f22] hover:bg-[#383a40] text-emerald-300 hover:text-white py-1.5 px-2 rounded-lg border border-[#3f4147] transition-all font-semibold flex items-center justify-center space-x-1" data-id="${acc.id}">
+                  <span>📺 Khán giả Stream</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       `;
     }).join('');
 
-    list.querySelectorAll('.btn-switch-account').forEach(btn => {
+    // Attach card event listeners
+    container.querySelectorAll('.btn-card-switch').forEach(btn => {
       btn.addEventListener('click', () => this.switchAccount(btn.dataset.id));
     });
 
-    list.querySelectorAll('.btn-del-account').forEach(btn => {
+    container.querySelectorAll('.btn-del-account').forEach(btn => {
       btn.addEventListener('click', () => this.deleteAccountFromVault(btn.dataset.id));
     });
 
-    const viewerSelect = document.getElementById('streamViewerAccountSelect');
-    if (viewerSelect) {
-      const curVal = viewerSelect.value;
-      viewerSelect.innerHTML = '<option value="">-- Chọn từ Két tài khoản hoặc dán Token bên dưới --</option>';
-      (this.accounts || []).forEach(acc => {
-        const opt = document.createElement('option');
-        opt.value = acc.id;
-        opt.textContent = `${acc.label || acc.username} (@${acc.username}) ${acc.isActive ? '[Tài khoản chính]' : ''}`;
-        viewerSelect.appendChild(opt);
+    container.querySelectorAll('.btn-card-farm').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const acc = this.accounts.find(a => a.id === id);
+        if (!acc) return;
+        if (!acc.isActive) {
+          await this.switchAccount(id);
+        }
+        // Jump to subtab playtime
+        document.querySelector('[data-tab="tab-badges"]')?.click();
+        document.querySelector('[data-subtab="sub-playtime"]')?.click();
       });
-      if (curVal) viewerSelect.value = curVal;
-    }
+    });
+
+    container.querySelectorAll('.btn-card-viewer').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const viewerSelect = document.getElementById('streamViewerAccountSelect');
+        if (viewerSelect) {
+          viewerSelect.value = id;
+        }
+        // Jump to subtab stream
+        document.querySelector('[data-tab="tab-badges"]')?.click();
+        document.querySelector('[data-subtab="sub-stream"]')?.click();
+        this.showToast('Đã chọn tài khoản này làm Khán giả (Viewer) cho Stream!', 'success');
+      });
+    });
   }
 
   // --- RICH PRESENCE STUDIO ---
@@ -819,6 +1049,9 @@ class App {
 
   async startPlaytime() {
     if (!this.token) { this.openTokenModal(); return; }
+    const intervalSec = parseInt(document.getElementById('playtimeIntervalSelect')?.value) || 30;
+    const targetHours = this.targetPlaytimeHours || 5000;
+
     const res = await fetch('/api/playtime/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -826,25 +1059,73 @@ class App {
         gameId: this.selectedPlaytimeGame.id,
         gameName: this.selectedPlaytimeGame.name,
         executable: this.selectedPlaytimeGame.executable,
-        intervalSec: 30
+        intervalSec,
+        targetHours
       })
     });
     const data = await res.json();
-    if (!data.success) alert(data.message);
+    if (!data.success) {
+      alert(data.message);
+    } else {
+      this.showToast(`Bắt đầu cày ${targetHours}h game "${this.selectedPlaytimeGame.name}"!`, 'success');
+    }
   }
 
   async stopPlaytime() { await fetch('/api/playtime/stop', { method: 'POST' }); }
 
   updatePlaytimeUI(status) {
+    if (!status) return;
     const isRunning = status.status === 'running';
-    document.getElementById('btnStartPlaytime').disabled = isRunning;
-    document.getElementById('btnStopPlaytime').disabled = !isRunning;
+    const btnStart = document.getElementById('btnStartPlaytime');
+    const btnStop = document.getElementById('btnStopPlaytime');
+    if (btnStart) btnStart.disabled = isRunning;
+    if (btnStop) btnStop.disabled = !isRunning;
 
-    const totalSec = status.elapsedSeconds || 0;
-    const hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
-    const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
-    const secs = String(totalSec % 60).padStart(2, '0');
-    document.getElementById('playtimeBigTimer').textContent = `${hrs}:${mins}:${secs}`;
+    const sessionSec = status.elapsedSeconds || 0;
+    const hrs = String(Math.floor(sessionSec / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((sessionSec % 3600) / 60)).padStart(2, '0');
+    const secs = String(sessionSec % 60).padStart(2, '0');
+    const timerEl = document.getElementById('playtimeBigTimer');
+    if (timerEl) timerEl.textContent = `${hrs}:${mins}:${secs}`;
+
+    const totalAccumulatedSec = status.accumulatedSeconds || sessionSec;
+    const totalHours = (totalAccumulatedSec / 3600).toFixed(2);
+    const targetHours = status.targetHours || this.targetPlaytimeHours || 5000;
+    const percent = Math.min(100, (totalHours / targetHours) * 100).toFixed(2);
+
+    const totalHoursEl = document.getElementById('playtimeTotalHoursDisplay');
+    if (totalHoursEl) totalHoursEl.textContent = `${totalHours}h`;
+
+    const accTextEl = document.getElementById('playtimeAccumulatedText');
+    if (accTextEl) accTextEl.textContent = `${totalHours} / ${targetHours.toLocaleString()} Giờ (${percent}%)`;
+
+    const barEl = document.getElementById('playtimeProgressBar');
+    if (barEl) barEl.style.width = `${percent}%`;
+
+    const heartbeatEl = document.getElementById('playtimeHeartbeatCounter');
+    if (heartbeatEl) heartbeatEl.textContent = status.totalHeartbeats || 0;
+
+    const badge = document.getElementById('playtimeStateBadge');
+    if (badge) {
+      if (isRunning) {
+        badge.className = 'text-xs font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold';
+        badge.textContent = 'Đang cày (Active)';
+      } else {
+        badge.className = 'text-xs font-mono px-2.5 py-0.5 rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30';
+        badge.textContent = 'Sẵn sàng';
+      }
+    }
+
+    const cloudBadge = document.getElementById('playtimeCloudBadge');
+    if (cloudBadge) {
+      if (isRunning) {
+        cloudBadge.className = 'text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1.5 font-bold';
+        cloudBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span><span>Cloud 24/7 Running</span>';
+      } else {
+        cloudBadge.className = 'text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/20 flex items-center space-x-1';
+        cloudBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span><span>Cloud 24/7 Standby</span>';
+      }
+    }
   }
 
   // --- HEADLESS STREAMER & SCREEN SHARE AFK ---
@@ -860,6 +1141,7 @@ class App {
     const viewerCustom = document.getElementById('streamViewerTokenCustom')?.value.trim();
     const viewerToken = viewerCustom || viewerSelect || null;
     const resolution = document.getElementById('streamResolution')?.value || '720p';
+    const mode = document.getElementById('streamConnectionMode')?.value || 'cloud';
 
     const btnStart = document.getElementById('btnStartStream');
     if (btnStart) {
@@ -875,7 +1157,8 @@ class App {
           channelId,
           viewerToken,
           resolution,
-          fps: 15
+          fps: 15,
+          mode
         })
       });
       const data = await res.json();
@@ -1197,6 +1480,24 @@ class App {
 
     document.getElementById('btnStartDiversity').addEventListener('click', () => this.startDiversity());
     document.getElementById('btnStopDiversity').addEventListener('click', () => this.stopDiversity());
+
+    // Playtime Target Hours Buttons
+    document.querySelectorAll('.playtime-target-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.playtime-target-btn').forEach(b => {
+          b.className = 'playtime-target-btn bg-[#232428] hover:bg-[#383a40] text-xs px-2.5 py-1.5 rounded-lg border border-[#3f4147] transition-all font-mono';
+        });
+        btn.className = 'playtime-target-btn bg-[#5865f2] text-white text-xs px-3 py-1.5 rounded-lg border border-indigo-400 font-bold font-mono';
+        this.targetPlaytimeHours = parseInt(btn.dataset.hours) || 5000;
+        this.updatePlaytimeUI({ status: 'idle' });
+      });
+    });
+
+    document.getElementById('playtimeAccountSelect')?.addEventListener('change', (e) => {
+      if (e.target.value) {
+        this.switchAccount(e.target.value);
+      }
+    });
 
     // Playtime Controls
     document.getElementById('btnStartPlaytime').addEventListener('click', () => this.startPlaytime());

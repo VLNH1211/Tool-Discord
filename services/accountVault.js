@@ -46,6 +46,9 @@ class AccountVault {
       global_name: acc.global_name,
       avatar: acc.avatar,
       userId: acc.userId,
+      email: acc.email || null,
+      phone: acc.phone || null,
+      verified: acc.verified !== undefined ? acc.verified : null,
       isActive: acc.id === this.activeAccountId,
       addedAt: acc.addedAt
     }));
@@ -53,6 +56,10 @@ class AccountVault {
 
   getAccountById(id) {
     return this.accounts.find(a => a.id === id);
+  }
+
+  getAccount(id) {
+    return this.getAccountById(id);
   }
 
   getActiveAccount() {
@@ -70,6 +77,9 @@ class AccountVault {
       username: profile.username,
       global_name: profile.global_name || profile.username,
       avatar: profile.avatar,
+      email: profile.email || null,
+      phone: profile.phone || null,
+      verified: profile.verified !== undefined ? profile.verified : null,
       label: label || profile.username,
       addedAt: new Date().toISOString(),
       isActive: makeActive ? true : (existingIndex >= 0 ? this.accounts[existingIndex].isActive : false)

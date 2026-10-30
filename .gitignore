@@ -8,6 +8,7 @@ data/accounts.json
 # Cache and generated media files
 data/detectables_cache.json
 data/stream_idle.mp4
+data/playtime_stats.json
 
 # Logs
 *.log
