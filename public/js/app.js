@@ -1716,11 +1716,14 @@ class App {
       return;
     }
 
-    if (!confirm('Bạn có muốn tự động cày tuần tự TẤT CẢ các nhiệm vụ Discord Quests và tự động nhận toàn bộ phần thưởng không?')) {
-      return;
+    const btnAuto = document.getElementById('btnAutoFarmAllQuests');
+    if (btnAuto) {
+      btnAuto.disabled = true;
+      btnAuto.classList.add('opacity-50', 'cursor-not-allowed');
+      btnAuto.innerHTML = `<span class="inline-block animate-spin mr-1.5">↻</span><span>Đang khởi động...</span>`;
     }
 
-    this.showToast('🚀 Bắt đầu quét & cày tự động tất cả Discord Quests...', 'info');
+    this.showToast('🚀 Đang quét & khởi động chuỗi cày tự động tất cả Discord Quests...', 'info');
     try {
       const res = await fetch('/api/quests/start-farm-all', {
         method: 'POST',
@@ -1732,11 +1735,21 @@ class App {
       const data = await res.json();
       if (!data.success) {
         this.showToast(data.message || 'Lỗi bắt đầu cày Quests', 'error');
+        if (btnAuto) {
+          btnAuto.disabled = false;
+          btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
+          btnAuto.innerHTML = `<span>⚡ Cày Tự Động Tất Cả Quests</span>`;
+        }
       } else {
         this.showToast(data.message || `Đang chạy hàng đợi ${data.total || ''} nhiệm vụ!`, 'success');
       }
     } catch (e) {
       this.showToast(`Lỗi: ${e.message}`, 'error');
+      if (btnAuto) {
+        btnAuto.disabled = false;
+        btnAuto.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnAuto.innerHTML = `<span>⚡ Cày Tự Động Tất Cả Quests</span>`;
+      }
     }
   }
 

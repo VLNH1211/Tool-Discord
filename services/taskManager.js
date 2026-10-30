@@ -705,7 +705,9 @@ class TaskManager {
   }
 
   async startAutoFarmAllQuests(userToken) {
-    if (userToken) this.user.token = userToken;
+    if (userToken) {
+      this.user.token = String(userToken).trim().replace(/^['"]|['"]$/g, '').replace(/^(Authorization:|Bearer|Bot)\s+/i, '').trim();
+    }
     if (!this.user.token) {
       throw new Error('Chưa đăng nhập Discord Token!');
     }
@@ -718,7 +720,8 @@ class TaskManager {
     }
 
     if (this.questTask.status === 'running') {
-      throw new Error('Đang có nhiệm vụ Quest khác đang chạy!');
+      this.stopQuestFarm();
+      await new Promise(r => setTimeout(r, 400));
     }
 
     this.questTask.status = 'running';
@@ -827,7 +830,9 @@ class TaskManager {
   }
 
   async startQuestFarm({ questId, questName, applicationId, gameName, targetSeconds = 900, intervalSec = 15, userToken }) {
-    if (userToken) this.user.token = userToken;
+    if (userToken) {
+      this.user.token = String(userToken).trim().replace(/^['"]|['"]$/g, '').replace(/^(Authorization:|Bearer|Bot)\s+/i, '').trim();
+    }
     if (!this.user.token) {
       throw new Error('Chưa đăng nhập Discord Token!');
     }
@@ -840,7 +845,8 @@ class TaskManager {
     }
 
     if (this.questTask.status === 'running') {
-      throw new Error('Đang có nhiệm vụ Quest khác đang chạy!');
+      this.stopQuestFarm();
+      await new Promise(r => setTimeout(r, 400));
     }
 
     this.questTask.status = 'running';
