@@ -1226,7 +1226,29 @@ class App {
       badge.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang bơm +${targetHours.toLocaleString()}h...</span>`;
     }
 
-    this.showToast(`⚡ Đang gửi gói tin bơm siêu tốc +${targetHours.toLocaleString()} giờ lên Discord...`, 'info');
+    // Immediately reveal and initialize the dedicated progress box
+    const turboBox = document.getElementById('turboPlaytimeProgressBox');
+    if (turboBox) {
+      turboBox.classList.remove('hidden');
+      const gameLabel = document.getElementById('turboPlaytimeGameLabel');
+      if (gameLabel) gameLabel.textContent = this.selectedPlaytimeGame?.name || 'VALORANT';
+      const batchLabel = document.getElementById('turboPlaytimeBatchLabel');
+      const totalB = Math.max(1, Math.ceil(targetHours / (targetHours <= 1000 ? Math.max(50, Math.ceil(targetHours / 5)) : targetHours <= 5000 ? 1000 : 5000)));
+      if (batchLabel) batchLabel.textContent = `Đợt 1 / ${totalB}`;
+      const percentText = document.getElementById('turboPlaytimePercentText');
+      if (percentText) percentText.textContent = '0%';
+      const bar = document.getElementById('turboPlaytimeProgressBar');
+      if (bar) bar.style.width = '0%';
+      const detailText = document.getElementById('turboPlaytimeDetailText');
+      if (detailText) detailText.textContent = `Đang khởi tạo gói bơm +${targetHours.toLocaleString()} Giờ...`;
+      const statusText = document.getElementById('turboPlaytimeStatusText');
+      if (statusText) {
+        statusText.className = 'text-amber-400 font-semibold flex items-center space-x-1.5';
+        statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Đang chuẩn bị Science Telemetry...</span>`;
+      }
+    }
+
+    this.showToast(`⚡ Đang kích hoạt gói bơm siêu tốc +${targetHours.toLocaleString()} giờ lên Discord...`, 'info');
 
     try {
       const res = await fetch('/api/playtime/turbo-inject', {
@@ -1352,6 +1374,62 @@ class App {
       } else {
         cloudBadge.className = 'text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/20 flex items-center space-x-1';
         cloudBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span><span>Cloud 24/7 Standby</span>';
+      }
+    }
+
+    // --- REAL-TIME TURBO PLAYTIME PROGRESS TRACKING ---
+    const turbo = status.turbo;
+    const turboBox = document.getElementById('turboPlaytimeProgressBox');
+    if (turbo && turbo.status && turbo.status !== 'idle') {
+      if (turboBox) turboBox.classList.remove('hidden');
+
+      const spinner = document.getElementById('turboPlaytimeSpinner');
+      const gameLabel = document.getElementById('turboPlaytimeGameLabel');
+      const batchLabel = document.getElementById('turboPlaytimeBatchLabel');
+      const percentText = document.getElementById('turboPlaytimePercentText');
+      const bar = document.getElementById('turboPlaytimeProgressBar');
+      const detailText = document.getElementById('turboPlaytimeDetailText');
+      const statusText = document.getElementById('turboPlaytimeStatusText');
+      const turboBadge = document.getElementById('turboInjectStatusBadge');
+
+      if (gameLabel && turbo.gameName) gameLabel.textContent = turbo.gameName;
+      if (batchLabel) batchLabel.textContent = `Đợt ${turbo.currentBatch || 1} / ${turbo.totalBatches || 1}`;
+      if (percentText) percentText.textContent = `${turbo.percent || 0}%`;
+      if (bar) bar.style.width = `${turbo.percent || 0}%`;
+      if (detailText) {
+        detailText.textContent = `Đã nạp: ${(turbo.currentHours || 0).toLocaleString()} / ${(turbo.targetHours || 0).toLocaleString()} Giờ`;
+      }
+
+      if (statusText) {
+        if (turbo.status === 'running') {
+          statusText.className = 'text-amber-400 font-semibold flex items-center space-x-1.5';
+          statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span><span>${this.escapeHtml(turbo.message || 'Đang gửi Science Telemetry...')}</span>`;
+          if (spinner) spinner.className = 'inline-block animate-spin text-amber-400 text-sm';
+        } else if (turbo.status === 'completed') {
+          statusText.className = 'text-emerald-400 font-bold flex items-center space-x-1.5';
+          statusText.innerHTML = `<span>✅ ${this.escapeHtml(turbo.message || 'Hoàn tất bơm 100%')}</span>`;
+          if (spinner) spinner.className = 'hidden';
+          if (bar) bar.style.width = '100%';
+          if (percentText) percentText.textContent = '100%';
+        } else if (turbo.status === 'error') {
+          statusText.className = 'text-rose-400 font-semibold flex items-center space-x-1.5';
+          statusText.innerHTML = `<span>❌ ${this.escapeHtml(turbo.message || 'Lỗi bơm giờ')}</span>`;
+          if (spinner) spinner.className = 'hidden';
+        }
+      }
+
+      if (turboBadge) {
+        if (turbo.status === 'running') {
+          turboBadge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1.5 animate-pulse';
+          turboBadge.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span><span>Đang bơm (${turbo.percent}%)...</span>`;
+        } else if (turbo.status === 'completed') {
+          turboBadge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1.5 font-bold';
+          turboBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Hoàn tất 100%</span>`;
+          setTimeout(() => {
+            turboBadge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center space-x-1.5';
+            turboBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Sẵn sàng bơm</span>`;
+          }, 8000);
+        }
       }
     }
   }

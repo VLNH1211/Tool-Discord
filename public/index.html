@@ -367,6 +367,28 @@
               </div>
             </div>
 
+            <!-- Live Injection Real-time Progress Bar & Feedback Card -->
+            <div id="turboPlaytimeProgressBox" class="hidden bg-[#1e1f22]/90 border border-amber-500/40 rounded-xl p-4 space-y-2.5 shadow-lg">
+              <div class="flex flex-wrap items-center justify-between text-xs font-semibold gap-2">
+                <span class="flex items-center space-x-2 text-white">
+                  <span id="turboPlaytimeSpinner" class="inline-block animate-spin text-amber-400 text-sm">↻</span>
+                  <span id="turboPlaytimeGameLabel" class="text-amber-300 font-mono font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">VALORANT</span>
+                  <span id="turboPlaytimeBatchLabel" class="text-indigo-300 font-mono text-xs bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/30">Đợt 1 / 5</span>
+                </span>
+                <span id="turboPlaytimePercentText" class="text-amber-400 font-mono font-black text-base">0%</span>
+              </div>
+              <div class="w-full bg-[#2b2d31] h-3.5 rounded-full overflow-hidden p-0.5 border border-[#3f4147]">
+                <div id="turboPlaytimeProgressBar" class="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-400 transition-all duration-300 shadow-sm" style="width: 0%"></div>
+              </div>
+              <div class="flex flex-wrap items-center justify-between text-xs text-[#949ba4] font-mono pt-0.5">
+                <span id="turboPlaytimeDetailText" class="text-gray-200 font-semibold">Đã bơm: 0 / 5,000 Giờ</span>
+                <span id="turboPlaytimeStatusText" class="text-emerald-400 font-semibold flex items-center space-x-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span>Đang gửi Science Telemetry...</span>
+                </span>
+              </div>
+            </div>
+
             <!-- Quick Injection Pills Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
               <button class="btn-turbo-quick bg-[#1e1f22] hover:bg-indigo-600/30 hover:border-indigo-400 border border-[#3f4147] text-white p-3 rounded-xl transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer group" data-hours="100">
@@ -1044,6 +1066,6 @@
   </div>
 
   <!-- Custom Scripts -->
-  <script src="/js/app.js?v=3.5.7"></script>
+  <script src="/js/app.js?v=3.5.8"></script>
 </body>
 </html>

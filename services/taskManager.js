@@ -55,6 +55,17 @@ class TaskManager {
       speedMultiplier: 1
     };
 
+    this.turboPlaytime = {
+      status: 'idle', // 'idle' | 'running' | 'completed' | 'error'
+      gameName: '',
+      targetHours: 0,
+      currentHours: 0,
+      percent: 0,
+      currentBatch: 0,
+      totalBatches: 0,
+      message: ''
+    };
+
     this.questTask = {
       status: 'idle', // 'idle' | 'running' | 'stopped' | 'completed'
       mode: 'parallel', // 'parallel' | 'single' | 'all'
@@ -411,7 +422,8 @@ class TaskManager {
       targetHours: this.targetPlaytimeHours,
       startedAt: this.playtimeTask.startedAt,
       intervalSec: this.playtimeTask.intervalSec,
-      speedMultiplier: this.playtimeTask.speedMultiplier || 1
+      speedMultiplier: this.playtimeTask.speedMultiplier || 1,
+      turbo: this.turboPlaytime
     };
   }
 
@@ -523,10 +535,35 @@ class TaskManager {
       executable: executable || 'VALORANT-Win64-Shipping.exe'
     };
 
-    this.addLog(`⚡ [TURBO INJECTION] Bắt đầu kích hoạt gói bơm siêu tốc +${hours.toLocaleString()} GIỜ cho game "${game.name}"...`, 'WARN');
+    // Calculate smart chunk size:
+    // If <= 1000h: 200h chunks (5 batches)
+    // If <= 5000h: 1000h chunks (5 batches)
+    // If > 5000h: 5000h chunks (~10 batches)
+    let chunkSize = 5000;
+    if (hours <= 1000) {
+      chunkSize = Math.max(50, Math.ceil(hours / 5));
+    } else if (hours <= 5000) {
+      chunkSize = 1000;
+    } else {
+      chunkSize = 5000;
+    }
 
-    // Chunks of max 5,000h per telemetry batch to avoid integer overflow
-    const chunkSize = 5000;
+    const totalBatches = Math.ceil(hours / chunkSize);
+
+    this.turboPlaytime = {
+      status: 'running',
+      gameName: game.name,
+      targetHours: hours,
+      currentHours: 0,
+      percent: 0,
+      currentBatch: 0,
+      totalBatches: totalBatches,
+      message: `Đang khởi tạo gói bơm siêu tốc +${hours.toLocaleString()} giờ...`
+    };
+
+    this.addLog(`⚡ [TURBO INJECTION] Bắt đầu kích hoạt gói bơm siêu tốc +${hours.toLocaleString()} GIỜ cho game "${game.name}" (${totalBatches} đợt nạp)...`, 'WARN');
+    this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
+
     let remaining = hours;
     let totalSuccess = 0;
     const sessionId = uuidv4();
@@ -540,31 +577,52 @@ class TaskManager {
       console.warn('Turbo launch warning:', e.message);
     }
 
+    let batchIndex = 0;
     while (remaining > 0) {
+      batchIndex++;
       const batchHours = Math.min(remaining, chunkSize);
       const durationMs = batchHours * 3600 * 1000;
       const isFinal = (remaining - batchHours <= 0);
-      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, false, durationMs, isFinal);
 
+      this.turboPlaytime.currentBatch = batchIndex;
+      this.turboPlaytime.message = `Đang gửi đợt ${batchIndex}/${totalBatches} (+${batchHours.toLocaleString()}h)...`;
+      this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
+
+      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, false, durationMs, isFinal);
       const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, heartbeatEvents);
+
       if (res.success) {
         totalSuccess += batchHours;
         remaining -= batchHours;
         this.accumulatedPlaytimeSeconds += (batchHours * 3600);
-        this.addLog(`⚡ [TURBO] Đã bơm thành công đợt +${batchHours.toLocaleString()}h! Tổng tiến độ: ${totalSuccess.toLocaleString()} / ${hours.toLocaleString()} giờ.`, 'SUCCESS');
+
+        this.turboPlaytime.currentHours = totalSuccess;
+        this.turboPlaytime.percent = Math.min(100, Math.round((totalSuccess / hours) * 100));
+        this.turboPlaytime.message = `Đã nạp thành công đợt ${batchIndex}/${totalBatches} (+${batchHours.toLocaleString()}h)!`;
+        this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
+
+        this.addLog(`⚡ [TURBO] Đã bơm thành công đợt ${batchIndex}/${totalBatches} (+${batchHours.toLocaleString()}h)! Tổng tiến độ: ${totalSuccess.toLocaleString()} / ${hours.toLocaleString()} giờ (${this.turboPlaytime.percent}%).`, 'SUCCESS');
       } else {
-        this.addLog(`⚠️ [TURBO] Discord từ chối đợt bơm: ${res.message}`, 'WARN');
+        this.turboPlaytime.status = 'error';
+        this.turboPlaytime.message = `Discord từ chối đợt ${batchIndex}: ${res.message}`;
+        this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
+        this.addLog(`⚠️ [TURBO] Discord từ chối đợt bơm ${batchIndex}: ${res.message}`, 'WARN');
         break;
       }
 
       if (remaining > 0) {
-        await new Promise(r => setTimeout(r, 600)); // safe interval between batches
+        await new Promise(r => setTimeout(r, 450)); // Safe stagger between batches
       }
     }
 
     if (this.settings.enableGatewayPresence) {
       gateway.updatePresence(game.name, game.id);
     }
+
+    this.turboPlaytime.status = totalSuccess > 0 ? 'completed' : 'error';
+    this.turboPlaytime.currentHours = totalSuccess;
+    this.turboPlaytime.percent = Math.min(100, Math.round((totalSuccess / hours) * 100));
+    this.turboPlaytime.message = `Hoàn tất bơm +${totalSuccess.toLocaleString()} giờ lên Discord!`;
 
     this._savePlaytimeStats();
     this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
