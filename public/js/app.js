@@ -2518,6 +2518,53 @@ class App {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
+
+  showToast(message, type = 'info') {
+    try {
+      let container = document.getElementById('toastContainer');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'fixed bottom-5 right-5 z-[9999] flex flex-col space-y-2 pointer-events-none max-w-sm w-full px-4';
+        document.body.appendChild(container);
+      }
+
+      const toast = document.createElement('div');
+      const bgColors = {
+        success: 'bg-[#1e1f22]/95 border-emerald-500/60 text-emerald-200 shadow-emerald-500/10',
+        error: 'bg-[#1e1f22]/95 border-rose-500/60 text-rose-200 shadow-rose-500/10',
+        warn: 'bg-[#1e1f22]/95 border-amber-500/60 text-amber-200 shadow-amber-500/10',
+        info: 'bg-[#1e1f22]/95 border-indigo-500/60 text-indigo-200 shadow-indigo-500/10'
+      };
+      const icons = {
+        success: '✓',
+        error: '✕',
+        warn: '⚠',
+        info: '⚡'
+      };
+
+      const colorClass = bgColors[type] || bgColors.info;
+      const icon = icons[type] || icons.info;
+
+      toast.className = `pointer-events-auto flex items-center space-x-3 p-3.5 rounded-xl border-2 backdrop-blur-md shadow-2xl text-xs font-semibold transition-all duration-300 transform translate-y-3 opacity-0 ${colorClass}`;
+      toast.innerHTML = `
+        <span class="w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs bg-white/10 shrink-0">${icon}</span>
+        <span class="flex-1 leading-snug break-words">${this.escapeHtml(message)}</span>
+      `;
+
+      container.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-3');
+        setTimeout(() => toast.remove(), 350);
+      }, 4500);
+    } catch (e) {
+      console.log('[Toast]:', message);
+    }
+  }
 }
 
 // Instantiate on DOM ready
