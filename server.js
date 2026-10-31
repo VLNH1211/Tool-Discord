@@ -552,9 +552,26 @@ app.post('/api/quests/stop-farm', (req, res) => {
   res.json({ success: true });
 });
 
+// Helper to auto-resolve and initialize user session from request token
+async function resolveUserSession(req) {
+  const userToken = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim() || req.body?.token?.trim();
+  if (userToken && (!taskManager.user.token || taskManager.user.token !== userToken)) {
+    try {
+      const check = await discordClient.getCurrentUser(userToken);
+      if (check.success) {
+        taskManager.setUser(userToken, check.data.analytics_token, check.data);
+        accountVault.addOrUpdateAccount(userToken, check.data, 'Tài khoản chính', true);
+      }
+    } catch (e) {
+      console.warn('[Auto-User Session]:', e.message);
+    }
+  }
+}
+
 // --- GAME DIVERSITY BOOSTER ---
 app.post('/api/diversity/start', async (req, res) => {
   try {
+    await resolveUserSession(req);
     const { targetCount, delayMs, jitterMs } = req.body;
     const result = await taskManager.startDiversity({
       targetCount: parseInt(targetCount) || 100,
@@ -584,6 +601,7 @@ app.post('/api/diversity/stop', (req, res) => {
 
 app.post('/api/diversity/turbo-inject', async (req, res) => {
   try {
+    await resolveUserSession(req);
     const { targetCount } = req.body;
     const result = await taskManager.turboInjectDiversity({
       targetCount: parseInt(targetCount) || 100
@@ -597,6 +615,7 @@ app.post('/api/diversity/turbo-inject', async (req, res) => {
 // --- PLAYTIME HOURS BOOSTER ---
 app.post('/api/playtime/start', async (req, res) => {
   try {
+    await resolveUserSession(req);
     const { gameId, gameName, executable, intervalSec, targetHours, speedMultiplier } = req.body;
     const result = await taskManager.startPlaytime({
       gameId,
@@ -614,6 +633,7 @@ app.post('/api/playtime/start', async (req, res) => {
 
 app.post('/api/playtime/turbo-inject', async (req, res) => {
   try {
+    await resolveUserSession(req);
     const { gameId, gameName, executable, hoursToAdd } = req.body;
     const result = await taskManager.turboInjectPlaytime({
       gameId,

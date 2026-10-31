@@ -1220,6 +1220,23 @@ class App {
       return;
     }
 
+    const game = this.selectedPlaytimeGame || {
+      id: '700136079562375258',
+      name: 'VALORANT',
+      executable: 'VALORANT-Win64-Shipping.exe'
+    };
+
+    // Calculate smart batch size matching backend logic
+    let chunkSize = 5000;
+    if (targetHours <= 1000) {
+      chunkSize = Math.max(50, Math.ceil(targetHours / 5));
+    } else if (targetHours <= 5000) {
+      chunkSize = 1000;
+    } else {
+      chunkSize = 5000;
+    }
+    const totalBatches = Math.max(1, Math.ceil(targetHours / chunkSize));
+
     const badge = document.getElementById('turboInjectStatusBadge');
     if (badge) {
       badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1.5 animate-pulse';
@@ -1228,55 +1245,113 @@ class App {
 
     // Immediately reveal and initialize the dedicated progress box
     const turboBox = document.getElementById('turboPlaytimeProgressBox');
-    if (turboBox) {
-      turboBox.classList.remove('hidden');
-      const gameLabel = document.getElementById('turboPlaytimeGameLabel');
-      if (gameLabel) gameLabel.textContent = this.selectedPlaytimeGame?.name || 'VALORANT';
-      const batchLabel = document.getElementById('turboPlaytimeBatchLabel');
-      const totalB = Math.max(1, Math.ceil(targetHours / (targetHours <= 1000 ? Math.max(50, Math.ceil(targetHours / 5)) : targetHours <= 5000 ? 1000 : 5000)));
-      if (batchLabel) batchLabel.textContent = `Đợt 1 / ${totalB}`;
-      const percentText = document.getElementById('turboPlaytimePercentText');
-      if (percentText) percentText.textContent = '0%';
-      const bar = document.getElementById('turboPlaytimeProgressBar');
-      if (bar) bar.style.width = '0%';
-      const detailText = document.getElementById('turboPlaytimeDetailText');
-      if (detailText) detailText.textContent = `Đang khởi tạo gói bơm +${targetHours.toLocaleString()} Giờ...`;
-      const statusText = document.getElementById('turboPlaytimeStatusText');
-      if (statusText) {
-        statusText.className = 'text-amber-400 font-semibold flex items-center space-x-1.5';
-        statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Đang chuẩn bị Science Telemetry...</span>`;
-      }
+    const spinner = document.getElementById('turboPlaytimeSpinner');
+    const gameLabel = document.getElementById('turboPlaytimeGameLabel');
+    const batchLabel = document.getElementById('turboPlaytimeBatchLabel');
+    const percentText = document.getElementById('turboPlaytimePercentText');
+    const bar = document.getElementById('turboPlaytimeProgressBar');
+    const detailText = document.getElementById('turboPlaytimeDetailText');
+    const statusText = document.getElementById('turboPlaytimeStatusText');
+
+    if (turboBox) turboBox.classList.remove('hidden');
+    if (spinner) spinner.className = 'inline-block animate-spin text-amber-400 text-sm';
+    if (gameLabel) gameLabel.textContent = game.name;
+    if (batchLabel) batchLabel.textContent = `Đợt 1 / ${totalBatches}`;
+    if (percentText) percentText.textContent = '10%';
+    if (bar) bar.style.width = '10%';
+    if (detailText) detailText.textContent = `Đang nạp: ${Math.round(targetHours / totalBatches).toLocaleString()} / ${targetHours.toLocaleString()} Giờ`;
+    if (statusText) {
+      statusText.className = 'text-amber-400 font-semibold flex items-center space-x-1.5';
+      statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span><span>Đang gửi Science Telemetry đợt 1...</span>`;
     }
 
     this.showToast(`⚡ Đang kích hoạt gói bơm siêu tốc +${targetHours.toLocaleString()} giờ lên Discord...`, 'info');
 
+    // Smooth active client ticker advancing the progress bar through batches during the request
+    let simulatedBatch = 1;
+    const tickerInterval = Math.max(250, Math.min(500, Math.floor(2500 / totalBatches)));
+    const ticker = setInterval(() => {
+      if (simulatedBatch < totalBatches) {
+        simulatedBatch++;
+        const currentHours = Math.round((simulatedBatch / totalBatches) * targetHours);
+        const percent = Math.min(95, Math.round((simulatedBatch / totalBatches) * 100));
+        if (batchLabel) batchLabel.textContent = `Đợt ${simulatedBatch} / ${totalBatches}`;
+        if (percentText) percentText.textContent = `${percent}%`;
+        if (bar) bar.style.width = `${percent}%`;
+        if (detailText) detailText.textContent = `Đang nạp: ${currentHours.toLocaleString()} / ${targetHours.toLocaleString()} Giờ`;
+        if (statusText) {
+          statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span><span>Đang gửi Science Telemetry đợt ${simulatedBatch}...</span>`;
+        }
+      }
+    }, tickerInterval);
+
     try {
       const res = await fetch('/api/playtime/turbo-inject', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        },
         body: JSON.stringify({
-          gameId: this.selectedPlaytimeGame.id,
-          gameName: this.selectedPlaytimeGame.name,
-          executable: this.selectedPlaytimeGame.executable,
+          token: this.token,
+          gameId: game.id,
+          gameName: game.name,
+          executable: game.executable,
           hoursToAdd: targetHours
         })
       });
+      clearInterval(ticker);
       const data = await res.json();
+
       if (!data.success) {
+        if (statusText) {
+          statusText.className = 'text-rose-400 font-semibold flex items-center space-x-1.5';
+          statusText.innerHTML = `<span>❌ ${this.escapeHtml(data.message || 'Lỗi bơm giờ')}</span>`;
+        }
+        if (spinner) spinner.className = 'hidden';
         this.showToast(data.message || 'Lỗi bơm giờ.', 'error');
       } else {
-        this.showToast(`👑 Bơm thành công +${data.addedHours.toLocaleString()} giờ! Tổng tích lũy: ${data.totalAccumulatedHours}h. Hãy mở Discord kiểm tra huy hiệu!`, 'success');
+        // Instant 100% completion snap!
+        if (batchLabel) batchLabel.textContent = `Đợt ${totalBatches} / ${totalBatches}`;
+        if (percentText) percentText.textContent = '100%';
+        if (bar) bar.style.width = '100%';
+        if (detailText) detailText.textContent = `Đã nạp thành công: +${(data.addedHours || targetHours).toLocaleString()} Giờ!`;
+        if (statusText) {
+          statusText.className = 'text-emerald-400 font-bold flex items-center space-x-1.5';
+          statusText.innerHTML = `<span>✅ Hoàn tất bơm 100% (+${(data.addedHours || targetHours).toLocaleString()}h lên Discord)!</span>`;
+        }
+        if (spinner) spinner.className = 'hidden';
+
+        // Update top overview playtime bar and displays
+        const targetOverview = this.targetPlaytimeHours || 5000;
+        const totalHrs = parseFloat(data.totalAccumulatedHours) || targetHours;
+        const totalHoursEl = document.getElementById('playtimeTotalHoursDisplay');
+        if (totalHoursEl) totalHoursEl.textContent = `${totalHrs.toFixed(2)}h`;
+        const accTextEl = document.getElementById('playtimeAccumulatedText');
+        const overviewPct = Math.min(100, (totalHrs / targetOverview) * 100).toFixed(1);
+        if (accTextEl) accTextEl.textContent = `${totalHrs.toFixed(2)} / ${targetOverview.toLocaleString()} Giờ (${overviewPct}%)`;
+        const topBarEl = document.getElementById('playtimeProgressBar');
+        if (topBarEl) topBarEl.style.width = `${overviewPct}%`;
+
+        this.showToast(`👑 Bơm thành công +${(data.addedHours || targetHours).toLocaleString()} giờ! Tổng tích lũy: ${data.totalAccumulatedHours}h. Hãy mở Discord kiểm tra huy hiệu!`, 'success');
       }
     } catch (e) {
+      clearInterval(ticker);
+      if (statusText) {
+        statusText.className = 'text-rose-400 font-semibold flex items-center space-x-1.5';
+        statusText.innerHTML = `<span>❌ Lỗi mạng: ${this.escapeHtml(e.message)}</span>`;
+      }
+      if (spinner) spinner.className = 'hidden';
       this.showToast(`Lỗi: ${e.message}`, 'error');
     } finally {
+      clearInterval(ticker);
       if (badge) {
-        badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1.5';
+        badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1.5 font-bold';
         badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Đã hoàn tất</span>`;
         setTimeout(() => {
           badge.className = 'text-xs font-mono px-3 py-1 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center space-x-1.5';
           badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>Sẵn sàng bơm</span>`;
-        }, 3000);
+        }, 5000);
       }
     }
   }
@@ -1300,8 +1375,14 @@ class App {
     try {
       const res = await fetch('/api/diversity/turbo-inject', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetCount })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        },
+        body: JSON.stringify({ 
+          token: this.token,
+          targetCount 
+        })
       });
       const data = await res.json();
       if (!data.success) {
