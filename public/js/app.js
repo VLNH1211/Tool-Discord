@@ -1334,6 +1334,13 @@ class App {
         if (topBarEl) topBarEl.style.width = `${overviewPct}%`;
 
         this.showToast(`👑 Bơm thành công +${(data.addedHours || targetHours).toLocaleString()} giờ! Tổng tích lũy: ${data.totalAccumulatedHours}h. Hãy mở Discord kiểm tra huy hiệu!`, 'success');
+
+        // Immediately sync complete server status
+        try {
+          const sRes = await fetch('/api/status');
+          const sData = await sRes.json();
+          if (sData.playtime) this.updatePlaytimeUI(sData.playtime);
+        } catch (_) {}
       }
     } catch (e) {
       clearInterval(ticker);
@@ -1474,10 +1481,16 @@ class App {
       const turboBadge = document.getElementById('turboInjectStatusBadge');
 
       if (gameLabel && turbo.gameName) gameLabel.textContent = turbo.gameName;
-      if (batchLabel) batchLabel.textContent = `Đợt ${turbo.currentBatch || 1} / ${turbo.totalBatches || 1}`;
-      if (percentText) percentText.textContent = `${turbo.percent || 0}%`;
-      if (bar) bar.style.width = `${turbo.percent || 0}%`;
-      if (detailText) {
+      if (batchLabel && turbo.currentBatch) batchLabel.textContent = `Đợt ${turbo.currentBatch} / ${turbo.totalBatches || 1}`;
+      
+      const newPercent = Number(turbo.percent || 0);
+      const curPercent = parseInt(percentText?.textContent) || 0;
+      if (percentText && (newPercent >= curPercent || turbo.status === 'completed')) {
+        percentText.textContent = `${newPercent}%`;
+        if (bar) bar.style.width = `${newPercent}%`;
+      }
+
+      if (detailText && turbo.currentHours !== undefined) {
         detailText.textContent = `Đã nạp: ${(turbo.currentHours || 0).toLocaleString()} / ${(turbo.targetHours || 0).toLocaleString()} Giờ`;
       }
 
