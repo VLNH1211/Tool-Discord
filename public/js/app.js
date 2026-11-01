@@ -1767,6 +1767,75 @@ class App {
     if (channelNameEl && (status.channelName || status.channelId)) {
       channelNameEl.textContent = status.channelName ? `#${status.channelName}` : status.channelId;
     }
+
+    // Live Game Indicator
+    const liveGameIndicator = document.getElementById('streamLiveGameIndicator');
+    if (liveGameIndicator) {
+      if (status.running) {
+        liveGameIndicator.className = 'font-bold text-amber-300 font-mono';
+        liveGameIndicator.textContent = status.gameTitle || 'VALORANT';
+      } else {
+        liveGameIndicator.className = 'font-semibold text-gray-400 font-mono';
+        liveGameIndicator.textContent = 'Chưa phát';
+      }
+    }
+
+    // Spectator Count & List
+    const specCountEl = document.getElementById('streamSpectatorCount');
+    const specListEl = document.getElementById('streamSpectatorList');
+    const specBadgeEl = document.getElementById('streamWatchStatusBadge');
+
+    const specs = Array.isArray(status.spectators) ? status.spectators : [];
+    const count = typeof status.spectatorCount === 'number' ? status.spectatorCount : specs.length;
+
+    if (specCountEl) {
+      specCountEl.textContent = count;
+    }
+
+    if (specBadgeEl) {
+      if (status.running && count > 0) {
+        specBadgeEl.className = 'text-[10px] text-emerald-400 font-mono flex items-center space-x-1';
+        specBadgeEl.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>Đang tính giờ</span>';
+      } else if (status.running) {
+        specBadgeEl.className = 'text-[10px] text-amber-400 font-mono flex items-center space-x-1';
+        specBadgeEl.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>Chờ người xem</span>';
+      } else {
+        specBadgeEl.className = 'text-[10px] text-gray-500 font-mono';
+        specBadgeEl.textContent = 'Ngoại tuyến';
+      }
+    }
+
+    if (specListEl) {
+      if (!status.running) {
+        specListEl.innerHTML = '<div class="text-[11px] text-[#949ba4] italic text-center py-2">Chưa bật luồng stream...</div>';
+      } else if (specs.length === 0) {
+        specListEl.innerHTML = '<div class="text-[11px] text-amber-300/80 italic text-center py-2">Đang chờ tài khoản phụ / bạn bè vào xem...</div>';
+      } else {
+        specListEl.innerHTML = specs.map(s => {
+          const safeName = this.escapeHtml(s.displayName || s.username || 'User');
+          const safeUser = this.escapeHtml(s.username || s.displayName || 'user');
+          const avatarUrl = s.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+          const isBot = s.isViewerBot;
+          return `
+            <div class="flex items-center justify-between p-2 rounded-lg bg-[#2b2d31] border border-[#383a40]">
+              <div class="flex items-center space-x-2">
+                <img src="${avatarUrl}" class="w-6 h-6 rounded-full border border-gray-600 object-cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-white leading-none">${safeName}</span>
+                  <span class="text-[10px] text-[#949ba4] font-mono leading-none mt-0.5">@${safeUser}</span>
+                </div>
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold border ${isBot ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'}">
+                  ${isBot ? '🤖 Acc Phụ' : '👤 Khán giả'}
+                </span>
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Đang xem stream"></span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
   }
 
   // --- BADGES: QUESTS ---

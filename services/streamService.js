@@ -42,6 +42,8 @@ class StreamService {
       startedAt: null,
       elapsedSeconds: 0,
       loopCount: 0,
+      spectators: [],
+      spectatorCount: 0,
       lastError: null
     };
 
@@ -116,6 +118,8 @@ class StreamService {
       startedAt: Date.now(),
       elapsedSeconds: 0,
       loopCount: 0,
+      spectators: [],
+      spectatorCount: 0,
       lastError: null
     };
 
@@ -164,6 +168,14 @@ class StreamService {
       this.state.guildId = channel.guild?.id || null;
       this.broadcast(`[Streamer] Đã tìm thấy kênh thoại "${channel.name}" (${channel.guild ? channel.guild.name : 'DM'}).`, 'info');
 
+      // Listen to voiceStateUpdate to detect any spectator joining / leaving in real time
+      this.streamerClient.on('voiceStateUpdate', (oldState, newState) => {
+        if (oldState.channelId === this.state.channelId || newState.channelId === this.state.channelId) {
+          this.refreshSpectators();
+          this.broadcast(null, 'status');
+        }
+      });
+
       // 3. Kết nối Voice & Stream theo chế độ
       if (this.mode === 'desktop') {
         // Desktop WebRTC Mode with watchdog
@@ -188,6 +200,9 @@ class StreamService {
       this.timer = setInterval(() => {
         if (!this.state.running) return;
         this.state.elapsedSeconds = Math.floor((Date.now() - this.state.startedAt) / 1000);
+        if (this.state.elapsedSeconds % 2 === 0) {
+          this.refreshSpectators();
+        }
         this.broadcast(null, 'heartbeat');
       }, 1000);
 
@@ -410,6 +425,55 @@ class StreamService {
 
     this.state.viewerState = 'connected';
     this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã vào kênh thoại và chính thức làm Khán giả (Spectator) trực tiếp!`, 'success');
+  }
+
+  refreshSpectators() {
+    if (!this.streamerClient || !this.state.channelId) return;
+
+    try {
+      const channel = this.streamerClient.channels.cache.get(this.state.channelId);
+      const spectators = [];
+
+      if (channel && channel.members) {
+        channel.members.forEach((member) => {
+          if (member.id === this.streamerClient.user?.id) return; // Skip streamer
+
+          const isViewerBot = Boolean(this.viewerClient && member.id === this.viewerClient.user?.id);
+          spectators.push({
+            id: member.id,
+            username: member.user?.username || member.displayName,
+            displayName: member.displayName || member.user?.username,
+            avatar: member.user?.displayAvatarURL ? member.user.displayAvatarURL({ dynamic: true, size: 64 }) : null,
+            isViewerBot,
+            label: isViewerBot ? 'Acc Phụ (Tool Bot)' : 'Khán giả',
+            isMuted: Boolean(member.voice?.selfMute || member.voice?.serverMute),
+            isDeaf: Boolean(member.voice?.selfDeaf || member.voice?.serverDeaf)
+          });
+        });
+      }
+
+      // If viewerClient is active, guarantee they appear in spectators
+      if (this.viewerClient && this.viewerClient.user && this.state.viewerState === 'connected') {
+        const found = spectators.some(s => s.id === this.viewerClient.user.id);
+        if (!found) {
+          spectators.push({
+            id: this.viewerClient.user.id,
+            username: this.viewerClient.user.username,
+            displayName: this.viewerClient.user.username,
+            avatar: this.viewerClient.user.displayAvatarURL ? this.viewerClient.user.displayAvatarURL({ dynamic: true, size: 64 }) : null,
+            isViewerBot: true,
+            label: 'Acc Phụ (Tool Bot)',
+            isMuted: true,
+            isDeaf: true
+          });
+        }
+      }
+
+      this.state.spectators = spectators;
+      this.state.spectatorCount = spectators.length;
+    } catch (e) {
+      console.warn('[refreshSpectators Warning]:', e.message);
+    }
   }
 
   ensureViewerSpectating() {

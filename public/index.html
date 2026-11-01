@@ -565,6 +565,13 @@
 
                 <div class="space-y-2 text-xs">
                   <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#1e1f22] border border-[#383a40]">
+                    <span class="text-[#949ba4] flex items-center space-x-1.5">
+                      <span>🎮</span>
+                      <span>Đang live game:</span>
+                    </span>
+                    <span id="streamLiveGameIndicator" class="font-bold text-amber-300 font-mono">Chưa phát</span>
+                  </div>
+                  <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#1e1f22] border border-[#383a40]">
                     <span class="text-[#949ba4]">Streamer (Chính):</span>
                     <span id="streamerStatusIndicator" class="font-semibold text-gray-400 font-mono">Chưa kết nối</span>
                   </div>
@@ -575,6 +582,23 @@
                   <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#1e1f22] border border-[#383a40]">
                     <span class="text-[#949ba4]">Kênh thoại:</span>
                     <span id="streamChannelName" class="text-indigo-400 font-mono font-bold">Kênh "Sảnh"</span>
+                  </div>
+                </div>
+
+                <!-- Live Spectators List Box -->
+                <div class="p-3 rounded-xl bg-[#1e1f22] border border-[#383a40] space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-white flex items-center space-x-1.5">
+                      <span>👁️ Người đang xem stream:</span>
+                      <span id="streamSpectatorCount" class="bg-indigo-500/20 text-indigo-300 text-[10px] px-2 py-0.5 rounded-full font-bold border border-indigo-500/30">0</span>
+                    </span>
+                    <span id="streamWatchStatusBadge" class="text-[10px] text-emerald-400 font-mono flex items-center space-x-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span>Đang tính giờ</span>
+                    </span>
+                  </div>
+                  <div id="streamSpectatorList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    <div class="text-[11px] text-[#949ba4] italic text-center py-2">Đang chờ khán giả...</div>
                   </div>
                 </div>
               </div>
@@ -1103,6 +1127,6 @@
   </div>
 
   <!-- Custom Scripts -->
-  <script src="/js/app.js?v=3.6.5"></script>
+  <script src="/js/app.js?v=3.6.6"></script>
 </body>
 </html>
