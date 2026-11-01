@@ -329,9 +329,15 @@ app.get('/api/stream/status', (req, res) => {
   res.json({ success: true, status: streamService.getStatus() });
 });
 
+app.post('/api/stream/presence', (req, res) => {
+  const { gameTitle, gameId } = req.body;
+  const result = streamService.updateStreamPresence(gameTitle || 'VALORANT', gameId || '700136079562375258');
+  res.json(result);
+});
+
 app.post('/api/stream/start', async (req, res) => {
   try {
-    let { streamerToken, viewerToken, guildId, channelId, resolution, fps, mode } = req.body;
+    let { streamerToken, viewerToken, guildId, channelId, resolution, fps, mode, gameTitle, gameId } = req.body;
     
     // If streamerToken not in body, fallback to taskManager
     if (!streamerToken) {
@@ -372,7 +378,9 @@ app.post('/api/stream/start', async (req, res) => {
       channelId,
       resolution,
       fps,
-      mode: mode || 'cloud'
+      mode: mode || 'cloud',
+      gameTitle: gameTitle || 'VALORANT',
+      gameId: gameId || '700136079562375258'
     });
     res.json(result);
   } catch (error) {

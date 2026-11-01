@@ -1560,6 +1560,8 @@ class App {
 
     const resolution = document.getElementById('streamResolution')?.value || '720p';
     const mode = document.getElementById('streamConnectionMode')?.value || 'cloud';
+    const gameTitle = document.getElementById('streamGameTitle')?.value?.trim() || 'VALORANT';
+    const gameId = document.getElementById('streamGameId')?.value?.trim() || '700136079562375258';
 
     const btnStart = document.getElementById('btnStartStream');
     if (btnStart) {
@@ -1577,7 +1579,9 @@ class App {
           channelId,
           resolution,
           fps: 15,
-          mode
+          mode,
+          gameTitle,
+          gameId
         })
       });
       const data = await res.json();
@@ -1610,6 +1614,36 @@ class App {
       this.updateStreamUI(data.status || { running: false });
     } catch (e) {
       this.showToast(`Lỗi: ${e.message}`, 'error');
+    }
+  }
+
+  async updateStreamPresence() {
+    const gameTitle = document.getElementById('streamGameTitle')?.value?.trim() || 'VALORANT';
+    const gameId = document.getElementById('streamGameId')?.value?.trim() || '700136079562375258';
+    const btn = document.getElementById('btnUpdateStreamPresence');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>Đang cập nhật...</span>';
+    }
+    try {
+      const res = await fetch('/api/stream/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameTitle, gameId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        this.showToast(`🎮 Đã đổi trạng thái Stream sang game: "${data.gameTitle || gameTitle}"!`, 'success');
+      } else {
+        this.showToast(data.message || 'Không thể đổi tên game Stream.', 'error');
+      }
+    } catch (e) {
+      this.showToast(`Lỗi: ${e.message}`, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>⚡ Đổi Game Stream Ngay</span>';
+      }
     }
   }
 
@@ -2365,6 +2399,7 @@ class App {
     // Headless Stream Controls
     document.getElementById('btnStartStream')?.addEventListener('click', () => this.startStream());
     document.getElementById('btnStopStream')?.addEventListener('click', () => this.stopStream());
+    document.getElementById('btnUpdateStreamPresence')?.addEventListener('click', () => this.updateStreamPresence());
 
     // Quests Controls
     document.getElementById('questAccountSelect')?.addEventListener('change', async (e) => {

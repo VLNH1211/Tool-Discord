@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
-const { Client } = require('discord.js-selfbot-v13');
+const { Client, RichPresence } = require('discord.js-selfbot-v13');
 const { DiscordStreamClient } = require('discord-stream-client');
 const ffmpegPath = require('ffmpeg-static');
 
@@ -27,6 +27,8 @@ class StreamService {
     this.state = {
       running: false,
       mode: 'cloud',
+      gameTitle: 'VALORANT',
+      gameId: '700136079562375258',
       streamerState: 'idle', // idle, logging_in, connected, streaming, error
       viewerState: 'idle',   // idle, logging_in, connected, disabled, error
       guildId: null,
@@ -83,7 +85,7 @@ class StreamService {
     }
   }
 
-  async startStream({ streamerToken, viewerToken, guildId, channelId, resolution = '720p', fps = 15, mode = 'cloud' }) {
+  async startStream({ streamerToken, viewerToken, guildId, channelId, resolution = '720p', fps = 15, mode = 'cloud', gameTitle = 'VALORANT', gameId = '700136079562375258' }) {
     if (this.state.running) {
       throw new Error('Tiến trình Stream đang chạy. Vui lòng dừng tiến trình hiện tại trước!');
     }
@@ -99,6 +101,8 @@ class StreamService {
     this.state = {
       running: true,
       mode: this.mode,
+      gameTitle: gameTitle || 'VALORANT',
+      gameId: String(gameId || '700136079562375258'),
       streamerState: 'logging_in',
       viewerState: viewerToken ? 'logging_in' : 'disabled',
       guildId: guildId || null,
@@ -236,15 +240,8 @@ class StreamService {
       }
     }, 1200);
 
-    // Set Go Live / Streaming Presence
-    try {
-      this.streamerClient.user.setActivity('Screen Share 5000h', {
-        type: 'STREAMING',
-        url: 'https://twitch.tv/discord'
-      });
-    } catch (e) {
-      // ignore
-    }
+    // Set Go Live / Streaming Presence with VALORANT or chosen game
+    this.updateStreamPresence(this.state.gameTitle || 'VALORANT', this.state.gameId || '700136079562375258');
 
     this.state.streamerState = 'streaming';
     this.broadcast(`✅ [Streamer] Đã vào phòng thoại & kích hoạt trạng thái Go Live Screen Share 24/7! (Chế độ Cloud Gateway)`, 'success');
@@ -280,6 +277,7 @@ class StreamService {
       this.broadcast(`[Streamer] Đã vào kênh thoại. Đang phát luồng Screen Share RTP...`, 'info');
       this.streamConnection = await this.voiceConnection.createStream();
       this.state.streamerState = 'streaming';
+      this.updateStreamPresence(this.state.gameTitle || 'VALORANT', this.state.gameId || '700136079562375258');
       this.broadcast(`[Streamer] Khởi tạo luồng Screen Share thành công! Bắt đầu truyền video...`, 'success');
       this.playVideoLoop();
     } catch (err) {
@@ -377,6 +375,42 @@ class StreamService {
 
     this.state.viewerState = 'connected';
     this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã vào kênh thoại làm khán giả! Điều kiện tính giờ stream đã thỏa mãn 100%!`, 'success');
+  }
+
+  updateStreamPresence(gameTitle = 'VALORANT', gameId = '700136079562375258') {
+    const title = gameTitle || 'VALORANT';
+    const appId = String(gameId || '700136079562375258');
+    this.state.gameTitle = title;
+    this.state.gameId = appId;
+
+    if (!this.streamerClient || !this.streamerClient.user) {
+      return { success: false, message: 'Streamer chưa kết nối hoặc chưa sẵn sàng!' };
+    }
+
+    try {
+      const pr = new RichPresence(this.streamerClient)
+        .setApplicationId(appId)
+        .setType('STREAMING')
+        .setName(title)
+        .setDetails(`Đang stream ${title}`)
+        .setState('Trực tiếp')
+        .setURL('https://twitch.tv/valorant');
+
+      this.streamerClient.user.setPresence({ activities: [pr] });
+      this.broadcast(`🎮 [Streamer] Đã cập nhật trạng thái Stream sang game: "${title}" (ID: ${appId})`, 'success');
+      return { success: true, gameTitle: title, gameId: appId };
+    } catch (err) {
+      try {
+        this.streamerClient.user.setActivity(title, {
+          type: 'STREAMING',
+          url: 'https://twitch.tv/valorant'
+        });
+        this.broadcast(`🎮 [Streamer] Đã cập nhật trạng thái Stream sang: "${title}"`, 'success');
+        return { success: true, gameTitle: title };
+      } catch (e) {
+        return { success: false, message: e.message };
+      }
+    }
   }
 
   stopStream() {

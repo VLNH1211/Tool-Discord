@@ -481,6 +481,36 @@
                 </div>
               </div>
 
+              <!-- Stream Game Name / Presence Settings -->
+              <div class="pt-3 border-t border-[#383a40]">
+                <div class="flex items-center justify-between mb-1">
+                  <label class="text-[#949ba4] font-medium text-xs">
+                    🎮 Game hiển thị khi Stream (Thay thế Screen Share):
+                  </label>
+                  <div class="flex items-center space-x-2 text-[10px]">
+                    <button type="button" onclick="document.getElementById('streamGameTitle').value = 'VALORANT'; document.getElementById('streamGameId').value = '700136079562375258';" class="text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer">
+                      VALORANT
+                    </button>
+                    <span class="text-[#4e5058]">|</span>
+                    <button type="button" onclick="document.getElementById('streamGameTitle').value = 'Counter-Strike 2'; document.getElementById('streamGameId').value = '730';" class="text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer">
+                      CS2
+                    </button>
+                    <span class="text-[#4e5058]">|</span>
+                    <button type="button" onclick="document.getElementById('streamGameTitle').value = 'Grand Theft Auto V'; document.getElementById('streamGameId').value = '424424351650070529';" class="text-indigo-400 hover:text-indigo-300 font-bold cursor-pointer">
+                      GTA V
+                    </button>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <input type="text" id="streamGameTitle" value="VALORANT" placeholder="Ví dụ: VALORANT" class="flex-1 bg-[#1e1f22] border border-[#3f4147] rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-indigo-500 focus:outline-none">
+                  <input type="hidden" id="streamGameId" value="700136079562375258">
+                  <button type="button" id="btnUpdateStreamPresence" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1 whitespace-nowrap">
+                    <span>⚡ Đổi Game Stream Ngay</span>
+                  </button>
+                </div>
+                <span class="text-[10px] text-emerald-400 mt-1 block">✓ Đang hiển thị chính thức: VALORANT (Mã ID: 700136079562375258)</span>
+              </div>
+
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-3 border-t border-[#383a40]">
                 <div>
                   <label class="text-[#949ba4] font-medium block mb-1">Chế độ kết nối:</label>
@@ -1066,6 +1096,6 @@
   </div>
 
   <!-- Custom Scripts -->
-  <script src="/js/app.js?v=3.6.2"></script>
+  <script src="/js/app.js?v=3.6.3"></script>
 </body>
 </html>
