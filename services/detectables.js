@@ -7,8 +7,9 @@ const PRESET_FILE = path.join(__dirname, '..', 'data', 'preset_games.json');
 
 const POPULAR_PRESETS = [
   { id: "730", name: "Counter-Strike 2", executable: "cs2.exe" },
-  { id: "424424351650070529", name: "Grand Theft Auto V", executable: "gta5.exe" },
   { id: "700136079562375258", name: "VALORANT", executable: "VALORANT-Win64-Shipping.exe" },
+  { id: "1402418586244612216", name: "Warframe", executable: "warframe.x64.exe" },
+  { id: "424424351650070529", name: "Grand Theft Auto V", executable: "gta5.exe" },
   { id: "356860074901241856", name: "League of Legends", executable: "League of Legends.exe" },
   { id: "356875221078245376", name: "Minecraft", executable: "javaw.exe" },
   { id: "564177579848564757", name: "Cyberpunk 2077", executable: "Cyberpunk2077.exe" },
