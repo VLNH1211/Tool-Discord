@@ -24,6 +24,7 @@ class StreamService {
     this.viewerPingTimer = null;
     this.loopCount = 0;
     this.mode = 'cloud'; // 'cloud' (Gateway Voice) | 'desktop' (WebRTC Video RTP)
+    this.activeViewerIds = new Set();
 
     this.state = {
       running: false,
@@ -101,6 +102,7 @@ class StreamService {
     }
 
     this.mode = mode || 'cloud';
+    this.activeViewerIds = new Set();
 
     this.state = {
       running: true,
@@ -175,6 +177,35 @@ class StreamService {
         if (oldState.channelId === this.state.channelId || newState.channelId === this.state.channelId) {
           this.refreshSpectators();
           this.broadcast(null, 'status');
+        }
+      });
+
+      // Listen to raw gateway packets to capture real-time STREAM_UPDATE (viewer_ids) and STREAM_CREATE
+      this.streamerClient.on('raw', (packet) => {
+        if (!packet) return;
+
+        if ((packet.t === 'STREAM_UPDATE' || packet.t === 'STREAM_CREATE') && packet.d) {
+          const streamerId = this.streamerClient.user?.id;
+          const activeKey = this.state.streamKey;
+          const isOurStream = !activeKey || (packet.d.stream_key && packet.d.stream_key === activeKey) || (streamerId && packet.d.stream_key && packet.d.stream_key.includes(streamerId));
+
+          if (isOurStream) {
+            if (packet.d.stream_key) {
+              this.state.streamKey = packet.d.stream_key;
+            }
+            if (Array.isArray(packet.d.viewer_ids)) {
+              console.log('[Streamer Gateway] STREAM_UPDATE viewer_ids:', packet.d.viewer_ids);
+              this.activeViewerIds = new Set(packet.d.viewer_ids.map(String));
+              this.refreshSpectators();
+              this.broadcast(null, 'status');
+            }
+          }
+        } else if (packet.t === 'STREAM_DELETE') {
+          if (packet.d?.stream_key && packet.d.stream_key === this.state.streamKey) {
+            this.activeViewerIds.clear();
+            this.refreshSpectators();
+            this.broadcast(null, 'status');
+          }
         }
       });
 
@@ -383,12 +414,22 @@ class StreamService {
     const streamKey = guildId ? `guild:${guildId}:${channelId}:${streamerId}` : `call:${channelId}:${streamerId}`;
     this.state.streamKey = streamKey;
 
-    // Listen on raw Gateway stream events to auto-bind to the exact stream key
+    // Listen on raw Gateway stream events to auto-bind to the exact stream key and capture viewer_ids
     this.viewerClient.on('raw', (packet) => {
-      if (packet.t === 'STREAM_CREATE' && packet.d && packet.d.stream_key) {
-        if (!streamerId || packet.d.stream_key.includes(streamerId)) {
-          this.state.streamKey = packet.d.stream_key;
-          if (this.viewerClient && this.viewerClient.ws) {
+      if (!packet) return;
+
+      if ((packet.t === 'STREAM_CREATE' || packet.t === 'STREAM_UPDATE') && packet.d) {
+        if (!streamerId || (packet.d.stream_key && packet.d.stream_key.includes(streamerId))) {
+          if (packet.d.stream_key) {
+            this.state.streamKey = packet.d.stream_key;
+          }
+          if (Array.isArray(packet.d.viewer_ids)) {
+            console.log('[Viewer Gateway] STREAM_UPDATE viewer_ids:', packet.d.viewer_ids);
+            packet.d.viewer_ids.forEach(id => this.activeViewerIds.add(String(id)));
+            this.refreshSpectators();
+            this.broadcast(null, 'status');
+          }
+          if (packet.t === 'STREAM_CREATE' && this.viewerClient && this.viewerClient.ws) {
             this.viewerClient.ws.broadcast({
               op: 20, // STREAM_WATCH
               d: { stream_key: packet.d.stream_key }
@@ -406,6 +447,9 @@ class StreamService {
           op: 20, // STREAM_WATCH
           d: { stream_key: activeKey }
         });
+        if (this.viewerClient.user) {
+          this.activeViewerIds.add(String(this.viewerClient.user.id));
+        }
         this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã nhận luồng stream và kích hoạt làm Spectator (Opcode 20 STREAM_WATCH)!`, 'success');
       }
     };
@@ -441,14 +485,20 @@ class StreamService {
           if (member.id === this.streamerClient.user?.id) return; // Skip streamer
 
           const isViewerBot = Boolean(this.viewerClient && member.id === this.viewerClient.user?.id);
+          const isWatching = isViewerBot || Boolean(this.activeViewerIds && this.activeViewerIds.has(String(member.id)));
+
           spectators.push({
             id: member.id,
             username: member.user?.username || member.displayName,
             displayName: member.displayName || member.user?.username,
             avatar: member.user?.displayAvatarURL ? member.user.displayAvatarURL({ dynamic: true, size: 64 }) : null,
             isViewerBot,
-            isWatching: isViewerBot,
-            label: isViewerBot ? 'Acc Phụ (Đang xem Stream)' : 'Trong phòng thoại',
+            isWatching,
+            label: isViewerBot
+              ? 'Acc Phụ (Đang xem Stream)'
+              : isWatching
+              ? 'Khán giả (Đang xem Stream)'
+              : 'Trong phòng thoại',
             isMuted: Boolean(member.voice?.selfMute || member.voice?.serverMute),
             isDeaf: Boolean(member.voice?.selfDeaf || member.voice?.serverDeaf)
           });
@@ -457,7 +507,7 @@ class StreamService {
 
       // If viewerClient is active, guarantee they appear in spectators
       if (this.viewerClient && this.viewerClient.user && this.state.viewerState === 'connected') {
-        const found = spectators.some(s => s.id === this.viewerClient.user.id);
+        const found = spectators.find(s => s.id === this.viewerClient.user.id);
         if (!found) {
           spectators.unshift({
             id: this.viewerClient.user.id,
@@ -470,8 +520,20 @@ class StreamService {
             isMuted: true,
             isDeaf: true
           });
+        } else {
+          found.isViewerBot = true;
+          found.isWatching = true;
         }
       }
+
+      // Sort: viewer bot first, then active watchers, then other members in room
+      spectators.sort((a, b) => {
+        if (a.isViewerBot && !b.isViewerBot) return -1;
+        if (!a.isViewerBot && b.isViewerBot) return 1;
+        if (a.isWatching && !b.isWatching) return -1;
+        if (!a.isWatching && b.isWatching) return 1;
+        return 0;
+      });
 
       this.state.spectators = spectators;
       this.state.spectatorCount = spectators.filter(s => s.isWatching).length || (spectators.length > 0 ? 1 : 0);
@@ -479,6 +541,24 @@ class StreamService {
     } catch (e) {
       console.warn('[refreshSpectators Warning]:', e.message);
     }
+  }
+
+  toggleSpectatorWatching(userId) {
+    if (!userId) return { success: false, message: 'Thiếu userId' };
+    const idStr = String(userId);
+    let isWatching = false;
+
+    if (this.activeViewerIds.has(idStr)) {
+      this.activeViewerIds.delete(idStr);
+      isWatching = false;
+    } else {
+      this.activeViewerIds.add(idStr);
+      isWatching = true;
+    }
+
+    this.refreshSpectators();
+    this.broadcast(null, 'status');
+    return { success: true, userId: idStr, isWatching };
   }
 
   ensureViewerSpectating() {
@@ -604,6 +684,7 @@ class StreamService {
     this.streamConnection = null;
     this.viewerStreamClient = null;
     this.viewerVoiceConnection = null;
+    if (this.activeViewerIds) this.activeViewerIds.clear();
 
     this.state.running = false;
     this.state.streamerState = 'idle';

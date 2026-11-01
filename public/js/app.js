@@ -1826,8 +1826,8 @@ class App {
           const badgeHtml = isBot
             ? '<span class="text-[10px] px-2 py-0.5 rounded-full font-bold border bg-purple-500/20 text-purple-300 border-purple-500/30">🤖 Acc Phụ • Đang xem</span>'
             : isWatching
-            ? '<span class="text-[10px] px-2 py-0.5 rounded-full font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">👁️ Đang xem stream</span>'
-            : '<span class="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-blue-500/10 text-blue-300 border-blue-500/20">🎧 Trong phòng thoại</span>';
+            ? `<button onclick="window.discordApp?.toggleSpectator('${s.id}')" title="Nhấn để đổi trạng thái" class="cursor-pointer text-[10px] px-2 py-0.5 rounded-full font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30 transition-colors">👁️ Đang xem stream</button>`
+            : `<button onclick="window.discordApp?.toggleSpectator('${s.id}')" title="Nhấn để đánh dấu đang xem stream" class="cursor-pointer text-[10px] px-2 py-0.5 rounded-full font-medium border bg-blue-500/10 text-blue-300 border-blue-500/20 hover:bg-blue-500/20 transition-colors">🎧 Trong phòng thoại</button>`;
 
           const indicatorDot = isWatching
             ? '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Đang xem stream (Đang tính giờ Huy hiệu)"></span>'
@@ -1850,6 +1850,23 @@ class App {
           `;
         }).join('');
       }
+    }
+  }
+
+  async toggleSpectator(userId) {
+    if (!userId) return;
+    try {
+      const res = await fetch('/api/stream/spectator/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        this.showToast(data.isWatching ? 'Đã đánh dấu tài khoản đang xem stream!' : 'Đã chuyển sang trạng thái trong phòng thoại!', 'info');
+      }
+    } catch (e) {
+      console.error('toggleSpectator error:', e);
     }
   }
 
@@ -2715,4 +2732,5 @@ class App {
 // Instantiate on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
   window.discordApp = new App();
+  window.app = window.discordApp;
 });

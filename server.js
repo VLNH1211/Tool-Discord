@@ -340,6 +340,12 @@ app.post('/api/stream/spectate', (req, res) => {
   res.json(result);
 });
 
+app.post('/api/stream/spectator/toggle', (req, res) => {
+  const { userId } = req.body;
+  const result = streamService.toggleSpectatorWatching(userId);
+  res.json(result);
+});
+
 app.post('/api/stream/start', async (req, res) => {
   try {
     let { streamerToken, viewerToken, guildId, channelId, resolution, fps, mode, gameTitle, gameId } = req.body;
