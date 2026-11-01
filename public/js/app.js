@@ -1786,10 +1786,15 @@ class App {
     const specBadgeEl = document.getElementById('streamWatchStatusBadge');
 
     const specs = Array.isArray(status.spectators) ? status.spectators : [];
-    const count = typeof status.spectatorCount === 'number' ? status.spectatorCount : specs.length;
+    const count = typeof status.spectatorCount === 'number' ? status.spectatorCount : specs.filter(s => s.isWatching || s.isViewerBot).length;
+    const totalInRoom = typeof status.voiceMembersCount === 'number' ? status.voiceMembersCount : specs.length;
 
     if (specCountEl) {
-      specCountEl.textContent = count;
+      if (totalInRoom > count) {
+        specCountEl.textContent = `${count} đang xem (${totalInRoom} trong phòng)`;
+      } else {
+        specCountEl.textContent = `${count} đang xem`;
+      }
     }
 
     if (specBadgeEl) {
@@ -1815,7 +1820,19 @@ class App {
           const safeName = this.escapeHtml(s.displayName || s.username || 'User');
           const safeUser = this.escapeHtml(s.username || s.displayName || 'user');
           const avatarUrl = s.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
-          const isBot = s.isViewerBot;
+          const isBot = Boolean(s.isViewerBot);
+          const isWatching = Boolean(s.isWatching || isBot);
+
+          const badgeHtml = isBot
+            ? '<span class="text-[10px] px-2 py-0.5 rounded-full font-bold border bg-purple-500/20 text-purple-300 border-purple-500/30">🤖 Acc Phụ • Đang xem</span>'
+            : isWatching
+            ? '<span class="text-[10px] px-2 py-0.5 rounded-full font-bold border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">👁️ Đang xem stream</span>'
+            : '<span class="text-[10px] px-2 py-0.5 rounded-full font-medium border bg-blue-500/10 text-blue-300 border-blue-500/20">🎧 Trong phòng thoại</span>';
+
+          const indicatorDot = isWatching
+            ? '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Đang xem stream (Đang tính giờ Huy hiệu)"></span>'
+            : '<span class="w-2 h-2 rounded-full bg-blue-400/60" title="Có mặt trong kênh thoại"></span>';
+
           return `
             <div class="flex items-center justify-between p-2 rounded-lg bg-[#2b2d31] border border-[#383a40]">
               <div class="flex items-center space-x-2">
@@ -1826,10 +1843,8 @@ class App {
                 </div>
               </div>
               <div class="flex items-center space-x-1.5">
-                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold border ${isBot ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'}">
-                  ${isBot ? '🤖 Acc Phụ' : '👤 Khán giả'}
-                </span>
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Đang xem stream"></span>
+                ${badgeHtml}
+                ${indicatorDot}
               </div>
             </div>
           `;

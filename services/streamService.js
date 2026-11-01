@@ -44,6 +44,7 @@ class StreamService {
       loopCount: 0,
       spectators: [],
       spectatorCount: 0,
+      voiceMembersCount: 0,
       lastError: null
     };
 
@@ -120,6 +121,7 @@ class StreamService {
       loopCount: 0,
       spectators: [],
       spectatorCount: 0,
+      voiceMembersCount: 0,
       lastError: null
     };
 
@@ -445,7 +447,8 @@ class StreamService {
             displayName: member.displayName || member.user?.username,
             avatar: member.user?.displayAvatarURL ? member.user.displayAvatarURL({ dynamic: true, size: 64 }) : null,
             isViewerBot,
-            label: isViewerBot ? 'Acc Phụ (Tool Bot)' : 'Khán giả',
+            isWatching: isViewerBot,
+            label: isViewerBot ? 'Acc Phụ (Đang xem Stream)' : 'Trong phòng thoại',
             isMuted: Boolean(member.voice?.selfMute || member.voice?.serverMute),
             isDeaf: Boolean(member.voice?.selfDeaf || member.voice?.serverDeaf)
           });
@@ -456,13 +459,14 @@ class StreamService {
       if (this.viewerClient && this.viewerClient.user && this.state.viewerState === 'connected') {
         const found = spectators.some(s => s.id === this.viewerClient.user.id);
         if (!found) {
-          spectators.push({
+          spectators.unshift({
             id: this.viewerClient.user.id,
             username: this.viewerClient.user.username,
             displayName: this.viewerClient.user.username,
             avatar: this.viewerClient.user.displayAvatarURL ? this.viewerClient.user.displayAvatarURL({ dynamic: true, size: 64 }) : null,
             isViewerBot: true,
-            label: 'Acc Phụ (Tool Bot)',
+            isWatching: true,
+            label: 'Acc Phụ (Đang xem Stream)',
             isMuted: true,
             isDeaf: true
           });
@@ -470,7 +474,8 @@ class StreamService {
       }
 
       this.state.spectators = spectators;
-      this.state.spectatorCount = spectators.length;
+      this.state.spectatorCount = spectators.filter(s => s.isWatching).length || (spectators.length > 0 ? 1 : 0);
+      this.state.voiceMembersCount = spectators.length;
     } catch (e) {
       console.warn('[refreshSpectators Warning]:', e.message);
     }
