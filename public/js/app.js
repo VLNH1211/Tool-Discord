@@ -1643,7 +1643,31 @@ class App {
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<span>⚡ Đổi Game Stream Ngay</span>';
+        btn.innerHTML = '<span>⚡ Đổi Game Stream</span>';
+      }
+    }
+  }
+
+  async ensureSpectating() {
+    const btn = document.getElementById('btnEnsureSpectating');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>Đang kích hoạt...</span>';
+    }
+    try {
+      const res = await fetch('/api/stream/spectate', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        this.showToast('🎉 Đã kích hoạt Opcode 20 (STREAM_WATCH) cho nick phụ vào danh sách Spectators!', 'success');
+      } else {
+        this.showToast(data.message || 'Chưa thể kích hoạt Spectator cho nick phụ.', 'error');
+      }
+    } catch (e) {
+      this.showToast(`Lỗi: ${e.message}`, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>👁️ Khán giả xem ngay</span>';
       }
     }
   }
@@ -2401,6 +2425,7 @@ class App {
     document.getElementById('btnStartStream')?.addEventListener('click', () => this.startStream());
     document.getElementById('btnStopStream')?.addEventListener('click', () => this.stopStream());
     document.getElementById('btnUpdateStreamPresence')?.addEventListener('click', () => this.updateStreamPresence());
+    document.getElementById('btnEnsureSpectating')?.addEventListener('click', () => this.ensureSpectating());
 
     // Quests Controls
     document.getElementById('questAccountSelect')?.addEventListener('change', async (e) => {

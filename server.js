@@ -335,6 +335,11 @@ app.post('/api/stream/presence', (req, res) => {
   res.json(result);
 });
 
+app.post('/api/stream/spectate', (req, res) => {
+  const result = streamService.ensureViewerSpectating();
+  res.json(result);
+});
+
 app.post('/api/stream/start', async (req, res) => {
   try {
     let { streamerToken, viewerToken, guildId, channelId, resolution, fps, mode, gameTitle, gameId } = req.body;

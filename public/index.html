@@ -508,8 +508,11 @@
                 <div class="flex items-center space-x-2">
                   <input type="text" id="streamGameTitle" value="VALORANT" placeholder="Ví dụ: VALORANT" class="flex-1 bg-[#1e1f22] border border-[#3f4147] rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-indigo-500 focus:outline-none">
                   <input type="hidden" id="streamGameId" value="700136079562375258">
-                  <button type="button" id="btnUpdateStreamPresence" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1 whitespace-nowrap">
-                    <span>⚡ Đổi Game Stream Ngay</span>
+                  <button type="button" id="btnUpdateStreamPresence" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1 whitespace-nowrap">
+                    <span>⚡ Đổi Game Stream</span>
+                  </button>
+                  <button type="button" id="btnEnsureSpectating" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1 whitespace-nowrap" title="Kích hoạt lệnh Opcode 20 để nick phụ chính thức xuất hiện trong danh sách Spectators">
+                    <span>👁️ Khán giả xem ngay</span>
                   </button>
                 </div>
                 <span class="text-[10px] text-emerald-400 mt-1 block">✓ Đang hiển thị chính thức: VALORANT (Mã ID: 700136079562375258)</span>
@@ -1100,6 +1103,6 @@
   </div>
 
   <!-- Custom Scripts -->
-  <script src="/js/app.js?v=3.6.4"></script>
+  <script src="/js/app.js?v=3.6.5"></script>
 </body>
 </html>

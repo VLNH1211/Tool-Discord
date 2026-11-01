@@ -21,6 +21,7 @@ class StreamService {
     this.viewerVoiceConnection = null;
 
     this.timer = null;
+    this.viewerPingTimer = null;
     this.loopCount = 0;
     this.mode = 'cloud'; // 'cloud' (Gateway Voice) | 'desktop' (WebRTC Video RTP)
 
@@ -361,20 +362,71 @@ class StreamService {
       }
     });
 
-    // Opcode 19: STREAM_WATCH (Báo cho Discord rằng tài khoản phụ đang xem trực tiếp stream của Streamer!)
-    const streamKey = `guild:${guildId}:${channelId}:${this.streamerClient?.user?.id}`;
-    setTimeout(() => {
-      if (this.viewerClient && this.viewerClient.ws) {
-        this.viewerClient.ws.broadcast({
-          op: 19,
-          d: { stream_key: streamKey }
-        });
-        this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã nhận luồng stream và đang xem trực tiếp!`, 'success');
+    const streamerId = this.streamerClient?.user?.id;
+    const streamKey = guildId ? `guild:${guildId}:${channelId}:${streamerId}` : `call:${channelId}:${streamerId}`;
+    this.state.streamKey = streamKey;
+
+    // Listen on raw Gateway stream events to auto-bind to the exact stream key
+    this.viewerClient.on('raw', (packet) => {
+      if (packet.t === 'STREAM_CREATE' && packet.d && packet.d.stream_key) {
+        if (!streamerId || packet.d.stream_key.includes(streamerId)) {
+          this.state.streamKey = packet.d.stream_key;
+          if (this.viewerClient && this.viewerClient.ws) {
+            this.viewerClient.ws.broadcast({
+              op: 20, // STREAM_WATCH
+              d: { stream_key: packet.d.stream_key }
+            });
+          }
+        }
       }
-    }, 1500);
+    });
+
+    // Opcode 20: STREAM_WATCH (Báo cho Discord rằng tài khoản phụ chính thức nhấn Xem Stream / Spectate!)
+    const dispatchWatch = () => {
+      if (this.viewerClient && this.viewerClient.ws && this.state.running) {
+        const activeKey = this.state.streamKey || streamKey;
+        this.viewerClient.ws.broadcast({
+          op: 20, // STREAM_WATCH
+          d: { stream_key: activeKey }
+        });
+        this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã nhận luồng stream và kích hoạt làm Spectator (Opcode 20 STREAM_WATCH)!`, 'success');
+      }
+    };
+
+    setTimeout(dispatchWatch, 1200);
+    setTimeout(dispatchWatch, 3000);
+
+    // Opcode 21: STREAM_PING (Duy trì nhịp Spectator liên tục mỗi 10 giây để giữ vị trí trong danh sách Spectators của Discord)
+    if (this.viewerPingTimer) clearInterval(this.viewerPingTimer);
+    this.viewerPingTimer = setInterval(() => {
+      if (this.viewerClient && this.viewerClient.ws && this.state.running) {
+        const activeKey = this.state.streamKey || streamKey;
+        this.viewerClient.ws.broadcast({
+          op: 21, // STREAM_PING
+          d: { stream_key: activeKey }
+        });
+      }
+    }, 10000);
 
     this.state.viewerState = 'connected';
-    this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã vào kênh thoại làm khán giả! Điều kiện tính giờ stream đã thỏa mãn 100%!`, 'success');
+    this.broadcast(`🎉 [Viewer] Tài khoản phụ @${this.viewerClient.user.username} đã vào kênh thoại và chính thức làm Khán giả (Spectator) trực tiếp!`, 'success');
+  }
+
+  ensureViewerSpectating() {
+    if (!this.viewerClient || !this.viewerClient.ws) {
+      return { success: false, message: 'Tài khoản phụ chưa kết nối hoặc chưa đăng nhập!' };
+    }
+    const streamerId = this.streamerClient?.user?.id;
+    const guildId = this.state.guildId;
+    const channelId = this.state.channelId;
+    const activeKey = this.state.streamKey || (guildId ? `guild:${guildId}:${channelId}:${streamerId}` : `call:${channelId}:${streamerId}`);
+
+    this.viewerClient.ws.broadcast({
+      op: 20, // STREAM_WATCH
+      d: { stream_key: activeKey }
+    });
+    this.broadcast(`👁️ [Viewer] Đã kích hoạt Opcode 20 (STREAM_WATCH) cho @${this.viewerClient.user?.username} xem stream!`, 'success');
+    return { success: true, streamKey: activeKey };
   }
 
   updateStreamPresence(gameTitle = 'VALORANT', gameId = '700136079562375258') {
@@ -419,6 +471,11 @@ class StreamService {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+
+    if (this.viewerPingTimer) {
+      clearInterval(this.viewerPingTimer);
+      this.viewerPingTimer = null;
     }
 
     if (this.player) {
