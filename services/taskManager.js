@@ -490,7 +490,7 @@ class TaskManager {
         if (!gateway.isConnected) {
           gateway.connect(this.user.token);
         }
-        if (this.playtimeTask.game) {
+        if (this.playtimeTask.game && (!gateway.currentActivity || gateway.currentActivity.name !== this.playtimeTask.game.name)) {
           gateway.updatePresence(this.playtimeTask.game.name, this.playtimeTask.game.id);
         }
       }

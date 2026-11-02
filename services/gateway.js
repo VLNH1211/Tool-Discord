@@ -273,11 +273,17 @@ class DiscordGatewayManager {
       return;
     }
 
+    // Preserve start timestamp for the same game session so Discord timer counts continuously without resetting!
+    if (!this.gameStartTime || this.currentGameName !== gameName) {
+      this.gameStartTime = Date.now();
+      this.currentGameName = gameName;
+    }
+
     const activity = {
       name: gameName,
       type: 0, // Playing
       application_id: gameId ? String(gameId) : undefined,
-      timestamps: { start: Date.now() }
+      timestamps: { start: this.gameStartTime }
     };
 
     this.sendRawPresence(activity);
@@ -358,6 +364,8 @@ class DiscordGatewayManager {
 
   clearPresence() {
     this.currentActivity = null;
+    this.gameStartTime = null;
+    this.currentGameName = null;
     this.sendRawPresence(null);
     this.log('Đã xóa bỏ trạng thái hiển thị trên hồ sơ.', 'GATEWAY');
   }
