@@ -485,6 +485,16 @@ class TaskManager {
 
   async _sendPlaytimeHeartbeat(isInitial = false) {
     try {
+      // Auto-heal Gateway connection & continuously enforce Game Presence on Discord profile
+      if (this.settings.enableGatewayPresence && this.user.token) {
+        if (!gateway.isConnected) {
+          gateway.connect(this.user.token);
+        }
+        if (this.playtimeTask.game) {
+          gateway.updatePresence(this.playtimeTask.game.name, this.playtimeTask.game.id);
+        }
+      }
+
       const multiplier = this.playtimeTask.speedMultiplier || 1;
       const durationMs = this.playtimeTask.intervalSec * 1000 * multiplier;
       const events = discordClient.createPlaytimeHeartbeatEvent(

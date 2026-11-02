@@ -9,9 +9,15 @@ class DiscordGatewayManager {
     this.userId = null;
     this.username = null;
     this.heartbeatTimer = null;
+    this.reconnectTimer = null;
+    this.reconnectAttempts = 0;
+    this.shouldReconnect = true;
+    this.sessionId = null;
+    this.resumeGatewayUrl = null;
     this.lastSequence = null;
     this.isConnected = false;
     this.currentActivity = null;
+    this.gameStartTime = null;
     this.logger = null;
 
     // Auto-Responder state
@@ -38,11 +44,25 @@ class DiscordGatewayManager {
   connect(userToken) {
     if (!userToken) return;
     this.token = userToken.trim().replace(/^"|"$/g, '');
-    this.disconnect();
+    this.shouldReconnect = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.ws) {
+      try {
+        this.ws.removeAllListeners();
+        this.ws.terminate();
+      } catch (e) {}
+      this.ws = null;
+    }
 
     try {
-      this.log('Connecting to Discord Gateway (wss://gateway.discord.gg)...', 'GATEWAY');
-      this.ws = new WebSocket('wss://gateway.discord.gg/?v=9&encoding=json');
+      const url = this.resumeGatewayUrl || 'wss://gateway.discord.gg/?v=9&encoding=json';
+      this.log(`Connecting to Discord Gateway (${url.split('?')[0]})...`, 'GATEWAY');
+      this.ws = new WebSocket(url);
 
       this.ws.on('open', () => {
         this.log('WebSocket connection opened. Awaiting Discord HELLO...', 'GATEWAY');
@@ -60,15 +80,40 @@ class DiscordGatewayManager {
       this.ws.on('close', (code, reason) => {
         this.isConnected = false;
         this.clearHeartbeat();
-        this.log(`Gateway disconnected. Code: ${code} - Reason: ${reason || 'Normal'}`, 'GATEWAY');
+        const reasonStr = reason ? reason.toString() : 'Normal';
+        this.log(`Gateway disconnected. Code: ${code} - Reason: ${reasonStr}`, 'GATEWAY');
+        if (this.shouldReconnect) {
+          this.scheduleReconnect();
+        }
       });
 
       this.ws.on('error', (err) => {
         this.log(`Gateway error: ${err.message}`, 'ERROR');
+        this.isConnected = false;
+        if (this.shouldReconnect) {
+          this.scheduleReconnect();
+        }
       });
     } catch (e) {
       this.log(`Failed to initiate Gateway connection: ${e.message}`, 'ERROR');
+      if (this.shouldReconnect) {
+        this.scheduleReconnect();
+      }
     }
+  }
+
+  scheduleReconnect() {
+    if (!this.shouldReconnect || !this.token) return;
+    if (this.reconnectTimer) return;
+
+    this.reconnectAttempts++;
+    const delay = Math.min(2000 * Math.pow(1.3, this.reconnectAttempts - 1), 15000);
+    this.log(`Tự động kết nối lại Gateway sau ${(delay / 1000).toFixed(1)}s (Lần thử #${this.reconnectAttempts})...`, 'GATEWAY');
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect(this.token);
+    }, delay);
   }
 
   handleMessage(payload) {
@@ -81,11 +126,37 @@ class DiscordGatewayManager {
       case 10: { // HELLO
         const interval = d.heartbeat_interval;
         this.startHeartbeat(interval);
-        this.sendIdentify();
+        if (this.sessionId && this.lastSequence !== null) {
+          this.sendResume();
+        } else {
+          this.sendIdentify();
+        }
         break;
       }
       case 1: { // Heartbeat requested
         this.sendHeartbeat();
+        break;
+      }
+      case 7: { // RECONNECT
+        this.log('Discord Gateway yêu cầu RECONNECT (Opcode 7). Đang kết nối lại...', 'GATEWAY');
+        if (this.ws) {
+          try { this.ws.close(4000, 'Reconnect requested by Discord'); } catch (e) {}
+        }
+        break;
+      }
+      case 9: { // INVALID_SESSION
+        const resumable = Boolean(d);
+        this.log(`Discord Gateway báo INVALID_SESSION (Opcode 9, resumable: ${resumable}).`, 'GATEWAY');
+        if (!resumable) {
+          this.sessionId = null;
+          this.lastSequence = null;
+          this.resumeGatewayUrl = null;
+        }
+        setTimeout(() => {
+          if (this.shouldReconnect && this.token) {
+            this.sendIdentify();
+          }
+        }, 1500);
         break;
       }
       case 11: { // Heartbeat ACK
@@ -94,9 +165,19 @@ class DiscordGatewayManager {
       case 0: { // Dispatch
         if (t === 'READY') {
           this.isConnected = true;
+          this.reconnectAttempts = 0;
           this.userId = d.user?.id;
           this.username = d.user?.username;
+          this.sessionId = d.session_id;
+          this.resumeGatewayUrl = d.resume_gateway_url ? `${d.resume_gateway_url}?v=9&encoding=json` : null;
           this.log(`Connected & Authenticated to Gateway as @${this.username || 'Unknown'}!`, 'SUCCESS');
+          if (this.currentActivity) {
+            this.sendRawPresence(this.currentActivity);
+          }
+        } else if (t === 'RESUMED') {
+          this.isConnected = true;
+          this.reconnectAttempts = 0;
+          this.log('Discord Gateway session RESUMED thành công! Trạng thái được duy trì liên tục.', 'SUCCESS');
           if (this.currentActivity) {
             this.sendRawPresence(this.currentActivity);
           }
@@ -106,6 +187,20 @@ class DiscordGatewayManager {
         break;
       }
     }
+  }
+
+  sendResume() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.log('Đang gửi Opcode 6 (RESUME) để khôi phục phiên kết nối...', 'GATEWAY');
+    const resumePayload = {
+      op: 6,
+      d: {
+        token: this.token,
+        session_id: this.sessionId,
+        seq: this.lastSequence
+      }
+    };
+    this.ws.send(JSON.stringify(resumePayload));
   }
 
   sendIdentify() {
@@ -360,10 +455,16 @@ class DiscordGatewayManager {
   }
 
   disconnect() {
+    this.shouldReconnect = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.clearHeartbeat();
     if (this.ws) {
       try {
         this.clearPresence();
+        this.ws.removeAllListeners();
         this.ws.terminate();
       } catch (e) {
         // ignore
@@ -371,6 +472,8 @@ class DiscordGatewayManager {
       this.ws = null;
     }
     this.isConnected = false;
+    this.sessionId = null;
+    this.lastSequence = null;
   }
 }
 
