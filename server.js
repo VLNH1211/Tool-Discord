@@ -635,19 +635,27 @@ app.post('/api/diversity/turbo-inject', async (req, res) => {
 app.post('/api/playtime/start', async (req, res) => {
   try {
     await resolveUserSession(req);
-    const { gameId, gameName, executable, intervalSec, targetHours, speedMultiplier } = req.body;
+    const { gameId, gameName, executable, intervalSec, targetHours, speedMultiplier, autoHourlyInject, autoInjectHours } = req.body;
     const result = await taskManager.startPlaytime({
       gameId,
       gameName,
       executable,
       intervalSec,
       targetHours,
-      speedMultiplier
+      speedMultiplier,
+      autoHourlyInject,
+      autoInjectHours
     });
     res.json(result);
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
+});
+
+app.post('/api/playtime/auto-inject-settings', (req, res) => {
+  const { enabled, hours } = req.body;
+  const result = taskManager.updateAutoInjectSettings({ enabled, hours });
+  res.json(result);
 });
 
 app.post('/api/playtime/turbo-inject', async (req, res) => {

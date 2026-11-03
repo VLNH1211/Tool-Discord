@@ -52,7 +52,12 @@ class TaskManager {
       startedAt: null,
       timer: null,
       intervalSec: 30,
-      speedMultiplier: 1
+      speedMultiplier: 1,
+      autoHourlyInject: true,
+      autoInjectHours: 10,
+      lastAutoInjectHour: 0,
+      autoInjectCount: 0,
+      autoInjectTotalHours: 0
     };
 
     this.turboPlaytime = {
@@ -423,11 +428,18 @@ class TaskManager {
       startedAt: this.playtimeTask.startedAt,
       intervalSec: this.playtimeTask.intervalSec,
       speedMultiplier: this.playtimeTask.speedMultiplier || 1,
+      autoHourlyInject: Boolean(this.playtimeTask.autoHourlyInject),
+      autoInjectHours: parseInt(this.playtimeTask.autoInjectHours) || 10,
+      autoInjectCount: parseInt(this.playtimeTask.autoInjectCount) || 0,
+      autoInjectTotalHours: parseInt(this.playtimeTask.autoInjectTotalHours) || 0,
+      nextAutoInjectInSeconds: this.playtimeTask.status === 'running' && this.playtimeTask.autoHourlyInject
+        ? Math.max(0, 3600 - (this.playtimeTask.elapsedSeconds % 3600))
+        : 0,
       turbo: this.turboPlaytime
     };
   }
 
-  async startPlaytime({ gameId, gameName, executable, intervalSec = 30, targetHours = 5000, speedMultiplier = 1 }) {
+  async startPlaytime({ gameId, gameName, executable, intervalSec = 30, targetHours = 5000, speedMultiplier = 1, autoHourlyInject = true, autoInjectHours = 10 }) {
     if (!this.user.token || !this.user.analyticsToken) {
       throw new Error('Chưa đăng nhập Discord Token hoặc thiếu Analytics Token!');
     }
@@ -458,10 +470,16 @@ class TaskManager {
     this.playtimeTask.startedAt = Date.now();
     this.playtimeTask.intervalSec = Math.max(10, parseInt(intervalSec) || 30);
     this.playtimeTask.speedMultiplier = multiplier;
+    this.playtimeTask.autoHourlyInject = autoHourlyInject !== undefined ? Boolean(autoHourlyInject) : true;
+    this.playtimeTask.autoInjectHours = Math.max(1, parseInt(autoInjectHours) || 10);
+    this.playtimeTask.lastAutoInjectHour = 0;
+    this.playtimeTask.autoInjectCount = 0;
+    this.playtimeTask.autoInjectTotalHours = 0;
 
     const speedDesc = multiplier > 1 ? ` [⚡ Turbo ${multiplier}x Tốc Độ]` : '';
+    const autoDesc = this.playtimeTask.autoHourlyInject ? ` [⚡ Tự động nạp: +${this.playtimeTask.autoInjectHours}h/1h]` : '';
     this.addLog(
-      `🎮 Khởi động AFK Playtime${speedDesc}: "${game.name}" (Heartbeat mỗi ${this.playtimeTask.intervalSec}s). Session ID: ${sessionId.slice(0, 8)}...`,
+      `🎮 Khởi động AFK Playtime${speedDesc}${autoDesc}: "${game.name}" (Heartbeat mỗi ${this.playtimeTask.intervalSec}s). Session ID: ${sessionId.slice(0, 8)}...`,
       'SCIENCE'
     );
 
@@ -476,11 +494,83 @@ class TaskManager {
     this.playtimeTask.timer = setInterval(async () => {
       this.playtimeTask.elapsedSeconds += (this.playtimeTask.intervalSec * this.playtimeTask.speedMultiplier);
       await this._sendPlaytimeHeartbeat(false);
+
+      // Check Auto-Hourly Injection: trigger every 3600 seconds of elapsed playtime
+      if (this.playtimeTask.autoHourlyInject && this.playtimeTask.status === 'running') {
+        const currentHour = Math.floor(this.playtimeTask.elapsedSeconds / 3600);
+        if (currentHour > (this.playtimeTask.lastAutoInjectHour || 0)) {
+          const hoursPassed = currentHour - (this.playtimeTask.lastAutoInjectHour || 0);
+          this.playtimeTask.lastAutoInjectHour = currentHour;
+          const hoursToInject = (this.playtimeTask.autoInjectHours || 10) * hoursPassed;
+          this._performAutoHourlyInjection(hoursToInject, currentHour).catch(err => {
+            console.error('Auto hourly injection error:', err);
+          });
+        }
+      }
+
       this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
     }, this.playtimeTask.intervalSec * 1000);
 
     this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
-    return { success: true, game, speedMultiplier: multiplier };
+    return { success: true, game, speedMultiplier: multiplier, autoHourlyInject: this.playtimeTask.autoHourlyInject, autoInjectHours: this.playtimeTask.autoInjectHours };
+  }
+
+  updateAutoInjectSettings({ enabled, hours }) {
+    if (enabled !== undefined) {
+      this.playtimeTask.autoHourlyInject = Boolean(enabled);
+    }
+    if (hours !== undefined) {
+      this.playtimeTask.autoInjectHours = Math.max(1, parseInt(hours) || 10);
+    }
+    // If currently running, sync lastAutoInjectHour to current elapsed hour so it won't inject duplicate backlog
+    if (this.playtimeTask.status === 'running') {
+      this.playtimeTask.lastAutoInjectHour = Math.floor(this.playtimeTask.elapsedSeconds / 3600);
+    }
+    this.addLog(`⚙️ Cấu hình Tự Động Bơm Giờ: ${this.playtimeTask.autoHourlyInject ? 'ĐÃ BẬT' : 'ĐÃ TẮT'} (Cứ 1h trôi qua tự động nạp: +${this.playtimeTask.autoInjectHours}h).`, 'INFO');
+    this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
+    return {
+      success: true,
+      autoHourlyInject: this.playtimeTask.autoHourlyInject,
+      autoInjectHours: this.playtimeTask.autoInjectHours
+    };
+  }
+
+  async _performAutoHourlyInjection(hoursToInject, currentHour) {
+    if (!this.user.token || !this.user.analyticsToken) return;
+    const game = this.playtimeTask.game;
+    if (!game) return;
+
+    const hours = Math.max(1, parseInt(hoursToInject) || 10);
+    this.addLog(`⚡ [TỰ ĐỘNG BƠM GIỜ] Đã cày tròn ${currentHour} tiếng AFK liên tục! Đang tự động nạp ngầm +${hours} giờ chơi cho "${game.name}"...`, 'WARN');
+
+    try {
+      const injectSessionId = uuidv4();
+      let seq = 1;
+
+      // 1. Gửi sự kiện khởi động game
+      const launchEvents = discordClient.createPlaytimeHeartbeatEvent(game, injectSessionId, seq++, true, 60000);
+      await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, launchEvents);
+
+      // 2. Gửi sự kiện thời lượng nạp số giờ
+      const durationMs = hours * 3600 * 1000;
+      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, injectSessionId, seq++, false, durationMs, true);
+      const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, heartbeatEvents);
+
+      if (res.success) {
+        this.accumulatedPlaytimeSeconds += (hours * 3600);
+        this.playtimeTask.autoInjectCount = (this.playtimeTask.autoInjectCount || 0) + 1;
+        this.playtimeTask.autoInjectTotalHours = (this.playtimeTask.autoInjectTotalHours || 0) + hours;
+        this._savePlaytimeStats();
+
+        const currentTotal = ((this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds) / 3600).toFixed(2);
+        this.addLog(`🎉 [TỰ ĐỘNG NẠP THÀNH CÔNG] Đã nạp thành công +${hours}h vào Discord! Tổng thời gian tích lũy: ${currentTotal} giờ (Đã tự động nạp: +${this.playtimeTask.autoInjectTotalHours}h qua ${this.playtimeTask.autoInjectCount} đợt).`, 'SUCCESS');
+        this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
+      } else {
+        this.addLog(`⚠️ [TỰ ĐỘNG NẠP Cảnh báo] Discord từ chối nạp tự động +${hours}h: ${res.message}`, 'WARN');
+      }
+    } catch (err) {
+      this.addLog(`❌ [TỰ ĐỘNG NẠP Lỗi] Ngoại lệ khi nạp tự động: ${err.message}`, 'ERROR');
+    }
   }
 
   async _sendPlaytimeHeartbeat(isInitial = false) {

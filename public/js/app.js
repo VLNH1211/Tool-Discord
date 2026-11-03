@@ -1191,6 +1191,8 @@ class App {
     const intervalSec = parseInt(document.getElementById('playtimeIntervalSelect')?.value) || 30;
     const speedMultiplier = parseInt(document.getElementById('playtimeSpeedMultiplier')?.value) || 1;
     const targetHours = this.targetPlaytimeHours || 5000;
+    const autoHourlyInject = document.getElementById('autoInjectToggle')?.checked ?? true;
+    const autoInjectHours = parseInt(document.getElementById('autoInjectHoursSelect')?.value) || 10;
 
     const res = await fetch('/api/playtime/start', {
       method: 'POST',
@@ -1201,7 +1203,9 @@ class App {
         executable: this.selectedPlaytimeGame.executable,
         intervalSec,
         speedMultiplier,
-        targetHours
+        targetHours,
+        autoHourlyInject,
+        autoInjectHours
       })
     });
     const data = await res.json();
@@ -1209,7 +1213,24 @@ class App {
       alert(data.message);
     } else {
       const turboNote = speedMultiplier > 1 ? ` (⚡ Turbo ${speedMultiplier}x)` : '';
-      this.showToast(`Bắt đầu cày ${targetHours}h game "${this.selectedPlaytimeGame.name}"${turboNote}!`, 'success');
+      const autoNote = autoHourlyInject ? ` (⚡ Tự động nạp: +${autoInjectHours}h/1h)` : '';
+      this.showToast(`Bắt đầu cày ${targetHours}h game "${this.selectedPlaytimeGame.name}"${turboNote}${autoNote}!`, 'success');
+    }
+  }
+
+  async updateAutoInjectSettings(enabled, hours) {
+    try {
+      const res = await fetch('/api/playtime/auto-inject-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, hours })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        this.showToast(`Đã ${enabled ? 'BẬT' : 'TẮT'} tự động bơm mỗi 1h nạp thêm +${hours}h!`, 'info');
+      }
+    } catch (e) {
+      console.error('updateAutoInjectSettings error:', e);
     }
   }
 
@@ -1463,6 +1484,48 @@ class App {
       } else {
         cloudBadge.className = 'text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/20 flex items-center space-x-1';
         cloudBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span><span>Cloud 24/7 Standby</span>';
+      }
+    }
+
+    // Auto Hourly Inject UI
+    const autoBadge = document.getElementById('autoInjectStatusBadge');
+    if (autoBadge) {
+      if (status.autoHourlyInject) {
+        autoBadge.className = 'bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-full font-bold border border-emerald-500/30';
+        autoBadge.textContent = 'Đang bật';
+      } else {
+        autoBadge.className = 'bg-gray-500/20 text-gray-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-gray-500/30';
+        autoBadge.textContent = 'Đã tắt';
+      }
+    }
+
+    const autoToggle = document.getElementById('autoInjectToggle');
+    if (autoToggle && typeof status.autoHourlyInject === 'boolean' && document.activeElement !== autoToggle) {
+      autoToggle.checked = status.autoHourlyInject;
+    }
+
+    const autoHoursSelect = document.getElementById('autoInjectHoursSelect');
+    if (autoHoursSelect && status.autoInjectHours && document.activeElement !== autoHoursSelect) {
+      autoHoursSelect.value = String(status.autoInjectHours);
+    }
+
+    const autoStats = document.getElementById('autoInjectStats');
+    if (autoStats) {
+      const cnt = status.autoInjectCount || 0;
+      const th = status.autoInjectTotalHours || 0;
+      autoStats.textContent = `${cnt} lần (+${th}h)`;
+    }
+
+    const autoCountdown = document.getElementById('autoInjectCountdown');
+    if (autoCountdown) {
+      if (isRunning && status.autoHourlyInject && status.nextAutoInjectInSeconds > 0) {
+        const cMins = String(Math.floor(status.nextAutoInjectInSeconds / 60)).padStart(2, '0');
+        const cSecs = String(status.nextAutoInjectInSeconds % 60).padStart(2, '0');
+        autoCountdown.textContent = `${cMins}:${cSecs}`;
+      } else if (isRunning && status.autoHourlyInject) {
+        autoCountdown.textContent = 'Đang nạp...';
+      } else {
+        autoCountdown.textContent = '--:--';
       }
     }
 
@@ -2483,6 +2546,16 @@ class App {
     // Playtime Controls
     document.getElementById('btnStartPlaytime').addEventListener('click', () => this.startPlaytime());
     document.getElementById('btnStopPlaytime').addEventListener('click', () => this.stopPlaytime());
+
+    // Auto Hourly Inject Settings Listeners
+    document.getElementById('autoInjectToggle')?.addEventListener('change', (e) => {
+      const hours = parseInt(document.getElementById('autoInjectHoursSelect')?.value) || 10;
+      this.updateAutoInjectSettings(e.target.checked, hours);
+    });
+    document.getElementById('autoInjectHoursSelect')?.addEventListener('change', (e) => {
+      const enabled = document.getElementById('autoInjectToggle')?.checked ?? true;
+      this.updateAutoInjectSettings(enabled, parseInt(e.target.value) || 10);
+    });
 
     // Turbo Instant Injection Controls
     document.querySelectorAll('.btn-turbo-quick').forEach(btn => {
