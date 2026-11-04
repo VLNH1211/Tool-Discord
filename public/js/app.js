@@ -1,4 +1,4 @@
-// Discord Mission Control Suite v3.0 - Frontend Application Logic
+// Discord Mission Control Suite v3.8.0 - Frontend Application Logic
 
 class App {
   constructor() {
