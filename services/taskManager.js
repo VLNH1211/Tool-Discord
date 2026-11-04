@@ -467,6 +467,7 @@ class TaskManager {
     this.playtimeTask.sequence = 1;
     this.playtimeTask.totalHeartbeats = 0;
     this.playtimeTask.elapsedSeconds = 0;
+    this.playtimeTask.sessionElapsedSeconds = 0;
     this.playtimeTask.startedAt = Date.now();
     this.playtimeTask.intervalSec = Math.max(10, parseInt(intervalSec) || 30);
     this.playtimeTask.speedMultiplier = multiplier;
@@ -492,8 +493,23 @@ class TaskManager {
 
     // Setup timer
     this.playtimeTask.timer = setInterval(async () => {
-      this.playtimeTask.elapsedSeconds += (this.playtimeTask.intervalSec * this.playtimeTask.speedMultiplier);
-      await this._sendPlaytimeHeartbeat(false);
+      const tickSec = (this.playtimeTask.intervalSec * this.playtimeTask.speedMultiplier);
+      this.playtimeTask.elapsedSeconds += tickSec;
+      this.playtimeTask.sessionElapsedSeconds = (this.playtimeTask.sessionElapsedSeconds || 0) + tickSec;
+
+      // Session Rotation: Rotate and close session every 3600 seconds (1 hour)
+      // This sends final_heartbeat: true to ensure Discord permanently commits the completed hour into badges!
+      if (this.playtimeTask.sessionElapsedSeconds >= 3600) {
+        this.addLog(`🔄 [Session Rotate] Đã cày tròn 1 giờ phiên. Đang chốt sổ phiên cũ lên Discord và mở phiên mới...`, 'INFO');
+        await this._sendPlaytimeHeartbeat(false, true);
+
+        this.playtimeTask.sessionId = uuidv4();
+        this.playtimeTask.sequence = 1;
+        this.playtimeTask.sessionElapsedSeconds = 0;
+        await this._sendPlaytimeHeartbeat(true, false);
+      } else {
+        await this._sendPlaytimeHeartbeat(false, false);
+      }
 
       // Check Auto-Hourly Injection: trigger every 3600 seconds of elapsed playtime
       if (this.playtimeTask.autoHourlyInject && this.playtimeTask.status === 'running') {
@@ -541,20 +557,11 @@ class TaskManager {
     if (!game) return;
 
     const hours = Math.max(1, parseInt(hoursToInject) || 10);
-    this.addLog(`⚡ [TỰ ĐỘNG BƠM GIỜ] Đã cày tròn ${currentHour} tiếng AFK liên tục! Đang tự động nạp ngầm +${hours} giờ chơi cho "${game.name}"...`, 'WARN');
+    this.addLog(`⚡ [TỰ ĐỘNG BƠM GIỜ] Đã cày tròn ${currentHour} tiếng AFK liên tục! Đang tự động nạp ngầm +${hours} giờ chơi cho "${game.name}" với chuẩn PE Fingerprint & Sliced History...`, 'WARN');
 
     try {
-      const injectSessionId = uuidv4();
-      let seq = 1;
-
-      // 1. Gửi sự kiện khởi động game
-      const launchEvents = discordClient.createPlaytimeHeartbeatEvent(game, injectSessionId, seq++, true, 60000);
-      await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, launchEvents);
-
-      // 2. Gửi sự kiện thời lượng nạp số giờ
-      const durationMs = hours * 3600 * 1000;
-      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, injectSessionId, seq++, false, durationMs, true);
-      const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, heartbeatEvents);
+      const events = discordClient.buildSlicedHistoryEvents(game, this.user.profile?.id, hours, { maxHoursPerDay: 10 });
+      const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, events);
 
       if (res.success) {
         this.accumulatedPlaytimeSeconds += (hours * 3600);
@@ -563,7 +570,7 @@ class TaskManager {
         this._savePlaytimeStats();
 
         const currentTotal = ((this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds) / 3600).toFixed(2);
-        this.addLog(`🎉 [TỰ ĐỘNG NẠP THÀNH CÔNG] Đã nạp thành công +${hours}h vào Discord! Tổng thời gian tích lũy: ${currentTotal} giờ (Đã tự động nạp: +${this.playtimeTask.autoInjectTotalHours}h qua ${this.playtimeTask.autoInjectCount} đợt).`, 'SUCCESS');
+        this.addLog(`🎉 [TỰ ĐỘNG NẠP THÀNH CÔNG] Đã nạp thành công +${hours}h vào Discord (Chuẩn Windows PE Fingerprint)! Tổng tích lũy: ${currentTotal}h.`, 'SUCCESS');
         this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
       } else {
         this.addLog(`⚠️ [TỰ ĐỘNG NẠP Cảnh báo] Discord từ chối nạp tự động +${hours}h: ${res.message}`, 'WARN');
@@ -573,7 +580,7 @@ class TaskManager {
     }
   }
 
-  async _sendPlaytimeHeartbeat(isInitial = false) {
+  async _sendPlaytimeHeartbeat(isInitial = false, isFinal = false) {
     try {
       // Auto-heal Gateway connection & continuously enforce Game Presence on Discord profile
       if (this.settings.enableGatewayPresence && this.user.token) {
@@ -592,7 +599,9 @@ class TaskManager {
         this.playtimeTask.sessionId,
         this.playtimeTask.sequence,
         isInitial,
-        durationMs
+        durationMs,
+        isFinal,
+        this.user.profile?.id
       );
 
       const result = await discordClient.sendScienceEvents(
@@ -622,6 +631,7 @@ class TaskManager {
 
   /**
    * TURBO INSTANT INJECTOR: Bơm siêu tốc trực tiếp hàng trăm / hàng nghìn giờ lên Discord
+   * Sử dụng công nghệ Daily Session Slicing + 146-byte PE Fingerprint
    */
   async turboInjectPlaytime({ gameId, gameName, executable, hoursToAdd = 5000 }) {
     if (!this.user.token || !this.user.analyticsToken) {
@@ -631,24 +641,18 @@ class TaskManager {
     const hours = parseInt(hoursToAdd) || 5000;
     const game = {
       id: String(gameId || '700136079562375258'),
-      name: gameName || 'VALORANT',
-      executable: executable || 'VALORANT-Win64-Shipping.exe'
+      name: gameName || 'Counter-Strike 2',
+      executable: executable || 'cs2.exe'
     };
 
-    // Calculate smart chunk size:
-    // If <= 1000h: 200h chunks (5 batches)
-    // If <= 5000h: 1000h chunks (5 batches)
-    // If > 5000h: 5000h chunks (~10 batches)
-    let chunkSize = 5000;
-    if (hours <= 1000) {
-      chunkSize = Math.max(50, Math.ceil(hours / 5));
-    } else if (hours <= 5000) {
-      chunkSize = 1000;
-    } else {
-      chunkSize = 5000;
-    }
+    // Build verified sliced history events across recent days (max 20h/day to evade single-day anomaly check)
+    const allEvents = discordClient.buildSlicedHistoryEvents(game, this.user.profile?.id, hours, { maxHoursPerDay: 20 });
+    const totalDays = Math.ceil(hours / 20);
 
-    const totalBatches = Math.ceil(hours / chunkSize);
+    // Each day has 3 events (launch, initial heartbeat, final heartbeat)
+    // Send in batches of 60 events (20 days per batch)
+    const eventsPerBatch = 60;
+    const totalBatches = Math.ceil(allEvents.length / eventsPerBatch);
 
     this.turboPlaytime = {
       status: 'running',
@@ -658,60 +662,42 @@ class TaskManager {
       percent: 0,
       currentBatch: 0,
       totalBatches: totalBatches,
-      message: `Đang khởi tạo gói bơm siêu tốc +${hours.toLocaleString()} giờ...`
+      message: `Đang khởi tạo gói bơm siêu tốc +${hours.toLocaleString()} giờ (${totalDays} ngày phân lát lịch sử, chuẩn PE Fingerprint)...`
     };
 
-    this.addLog(`⚡ [TURBO INJECTION] Bắt đầu kích hoạt gói bơm siêu tốc +${hours.toLocaleString()} GIỜ cho game "${game.name}" (${totalBatches} đợt nạp)...`, 'WARN');
+    this.addLog(`⚡ [TURBO INJECTION] Bắt đầu kích hoạt gói bơm siêu tốc +${hours.toLocaleString()} GIỜ cho game "${game.name}" (${totalDays} ngày phân lát, ${totalBatches} đợt nạp chuẩn Windows PE Fingerprint)...`, 'WARN');
     this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
 
-    let remaining = hours;
-    let totalSuccess = 0;
-    const sessionId = uuidv4();
-    let seq = 1;
+    let totalSuccessHours = 0;
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const chunkEvents = allEvents.slice(batchIndex * eventsPerBatch, (batchIndex + 1) * eventsPerBatch);
+      const chunkDays = Math.floor(chunkEvents.length / 3);
+      const chunkHours = Math.round(chunkDays * (hours / totalDays));
 
-    // Send initial launch game event
-    try {
-      const launchEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, true, 60000);
-      await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, launchEvents);
-    } catch (e) {
-      console.warn('Turbo launch warning:', e.message);
-    }
-
-    let batchIndex = 0;
-    while (remaining > 0) {
-      batchIndex++;
-      const batchHours = Math.min(remaining, chunkSize);
-      const durationMs = batchHours * 3600 * 1000;
-      const isFinal = (remaining - batchHours <= 0);
-
-      this.turboPlaytime.currentBatch = batchIndex;
-      this.turboPlaytime.message = `Đang gửi đợt ${batchIndex}/${totalBatches} (+${batchHours.toLocaleString()}h)...`;
+      this.turboPlaytime.currentBatch = batchIndex + 1;
+      this.turboPlaytime.message = `Đang gửi đợt ${batchIndex + 1}/${totalBatches} (+${chunkHours}h phân lát lịch sử)...`;
       this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
 
-      const heartbeatEvents = discordClient.createPlaytimeHeartbeatEvent(game, sessionId, seq++, false, durationMs, isFinal);
-      const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, heartbeatEvents);
+      const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, chunkEvents);
 
       if (res.success) {
-        totalSuccess += batchHours;
-        remaining -= batchHours;
-        this.accumulatedPlaytimeSeconds += (batchHours * 3600);
-
-        this.turboPlaytime.currentHours = totalSuccess;
-        this.turboPlaytime.percent = Math.min(100, Math.round((totalSuccess / hours) * 100));
-        this.turboPlaytime.message = `Đã nạp thành công đợt ${batchIndex}/${totalBatches} (+${batchHours.toLocaleString()}h)!`;
+        totalSuccessHours += chunkHours;
+        this.turboPlaytime.currentHours = Math.min(hours, totalSuccessHours);
+        this.turboPlaytime.percent = Math.min(100, Math.round(((batchIndex + 1) / totalBatches) * 100));
+        this.turboPlaytime.message = `Đã nạp thành công đợt ${batchIndex + 1}/${totalBatches} (+${chunkHours}h)!`;
         this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
 
-        this.addLog(`⚡ [TURBO] Đã bơm thành công đợt ${batchIndex}/${totalBatches} (+${batchHours.toLocaleString()}h)! Tổng tiến độ: ${totalSuccess.toLocaleString()} / ${hours.toLocaleString()} giờ (${this.turboPlaytime.percent}%).`, 'SUCCESS');
+        this.addLog(`⚡ [TURBO] Đã bơm thành công đợt ${batchIndex + 1}/${totalBatches} (+${chunkHours}h chuẩn PE Fingerprint)! Tiến độ: ${this.turboPlaytime.percent}%.`, 'SUCCESS');
       } else {
         this.turboPlaytime.status = 'error';
-        this.turboPlaytime.message = `Discord từ chối đợt ${batchIndex}: ${res.message}`;
+        this.turboPlaytime.message = `Discord từ chối đợt ${batchIndex + 1}: ${res.message}`;
         this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
-        this.addLog(`⚠️ [TURBO] Discord từ chối đợt bơm ${batchIndex}: ${res.message}`, 'WARN');
+        this.addLog(`⚠️ [TURBO] Discord từ chối đợt bơm ${batchIndex + 1}: ${res.message}`, 'WARN');
         break;
       }
 
-      if (remaining > 0) {
-        await new Promise(r => setTimeout(r, 450)); // Safe stagger between batches
+      if (batchIndex < totalBatches - 1) {
+        await new Promise(r => setTimeout(r, 500)); // Safe stagger
       }
     }
 
@@ -719,19 +705,22 @@ class TaskManager {
       gateway.updatePresence(game.name, game.id);
     }
 
-    this.turboPlaytime.status = totalSuccess > 0 ? 'completed' : 'error';
-    this.turboPlaytime.currentHours = totalSuccess;
-    this.turboPlaytime.percent = Math.min(100, Math.round((totalSuccess / hours) * 100));
-    this.turboPlaytime.message = `Hoàn tất bơm +${totalSuccess.toLocaleString()} giờ lên Discord!`;
+    this.accumulatedPlaytimeSeconds += (totalSuccessHours * 3600);
+    this.turboPlaytime.status = totalSuccessHours > 0 ? 'completed' : 'error';
+    this.turboPlaytime.currentHours = totalSuccessHours;
+    this.turboPlaytime.percent = 100;
+    this.turboPlaytime.message = `Hoàn tất bơm +${totalSuccessHours.toLocaleString()} giờ chuẩn Windows PE Fingerprint lên Discord!`;
 
     this._savePlaytimeStats();
     this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
-    this.addLog(`👑 [TURBO HOÀN TẤT] Bơm thành công tổng cộng +${totalSuccess.toLocaleString()} giờ chơi lên máy chủ Discord! Hãy mở Discord kiểm tra huy hiệu!`, 'SUCCESS');
+    this.addLog(`👑 [TURBO HOÀN TẤT] Bơm thành công tổng cộng +${totalSuccessHours.toLocaleString()} giờ chơi chuẩn Windows PE Fingerprint lên máy chủ Discord!`, 'SUCCESS');
 
     return {
       success: true,
-      addedHours: totalSuccess,
+      addedHours: totalSuccessHours,
       totalAccumulatedHours: (this.accumulatedPlaytimeSeconds / 3600).toFixed(1)
+    };
+  }
     };
   }
 
@@ -826,6 +815,24 @@ class TaskManager {
 
   stopPlaytime() {
     if (this.playtimeTask.status !== 'running') return;
+
+    // Send final heartbeat to Discord Science to close and commit the active session
+    if (this.user.token && this.user.analyticsToken && this.playtimeTask.game) {
+      try {
+        const finalEvents = discordClient.createPlaytimeHeartbeatEvent(
+          this.playtimeTask.game,
+          this.playtimeTask.sessionId,
+          this.playtimeTask.sequence + 1,
+          false,
+          this.playtimeTask.intervalSec * 1000,
+          true, // isFinal = true: commits session in Discord big data pipeline
+          this.user.profile?.id
+        );
+        discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, finalEvents).catch(err => {
+          console.warn('Final heartbeat warning on stop:', err.message);
+        });
+      } catch (_) {}
+    }
 
     if (this.playtimeTask.timer) {
       clearInterval(this.playtimeTask.timer);

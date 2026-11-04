@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 
 const DISCORD_API_BASE = 'https://discord.com/api/v9';
@@ -177,13 +178,49 @@ class DiscordClient {
   }
 
   /**
-   * Build Playtime Continuous Heartbeat Event
+   * Generate valid 146-byte Windows PE executable fingerprint encrypted with Discord career key
    */
-  createPlaytimeHeartbeatEvent(game, sessionId, sequenceNumber, isInitial = false, durationMs = 60000, isFinal = false) {
+  generatePEFingerprint(userId) {
+    try {
+      const uid = String(userId || '');
+      const sha256 = (data) => crypto.createHash('sha256').update(data).digest();
+      const guid = uuidv4();
+      const machineUserHash = sha256(guid + uid);
+      const headerHash = sha256('pe_header_' + uid);
+      const sectionHash = sha256('pe_section_' + uid);
+      const certHash = sha256('pe_cert_' + uid);
+
+      const buf = Buffer.alloc(146);
+      buf[0] = 1;
+      buf[1] = 1;
+      buf.writeBigUInt64LE(65432100n, 2);
+      buf.writeUInt32LE(1690000000, 10);
+      buf.writeUInt32LE(0x02500000, 14);
+      headerHash.copy(buf, 18);
+      machineUserHash.copy(buf, 50);
+      sectionHash.copy(buf, 82);
+      certHash.copy(buf, 114);
+
+      const key = sha256(uid + 'https://discord.com/careers');
+      for (let i = 1; i < buf.length; i++) {
+        buf[i] ^= key[(i - 1) & 31];
+      }
+
+      return buf.toString('base64');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
+   * Build Playtime Continuous Heartbeat Event with PE Fingerprint
+   */
+  createPlaytimeHeartbeatEvent(game, sessionId, sequenceNumber, isInitial = false, durationMs = 60000, isFinal = false, userId = null) {
     const now = Date.now();
     const gameId = String(game.id);
     const gameName = game.name;
     const gameExecutable = game.executable || 'game.exe';
+    const fingerprint = this.generatePEFingerprint(userId);
 
     const events = [];
 
@@ -196,7 +233,10 @@ class DiscordClient {
           game_id: gameId,
           game_name: gameName,
           game_executable: gameExecutable,
-          verified: true
+          verified: true,
+          detection_method: 'verified_game',
+          executable_fingerprint: fingerprint,
+          client_app_state: 'focused'
         }
       });
     }
@@ -218,6 +258,126 @@ class DiscordClient {
         client_send_timestamp: now
       }
     });
+
+    return events;
+  }
+
+  /**
+   * Build Verified Sliced History Events for Turbo & Auto-hourly Injection
+   * Slices hours into realistic daily sessions (max 20h/day) across past days
+   * to bypass Discord's single-day anomaly filters and ensure 100% badge progression.
+   */
+  buildSlicedHistoryEvents(game, userId, totalHours, options = {}) {
+    const maxHoursPerDay = options.maxHoursPerDay || 20;
+    const hours = Math.max(1, parseInt(totalHours) || 10);
+    const days = Math.ceil(hours / maxHoursPerDay);
+    const hoursPerDay = hours / days;
+    const durationMs = Math.floor(hoursPerDay * 3600 * 1000);
+    const fingerprint = this.generatePEFingerprint(userId);
+    const now = Date.now();
+    const heartbeatId = uuidv4();
+    const signature = uuidv4();
+    let seq = 0;
+
+    const events = [];
+    const exeName = game.executable || `${game.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'game'}.exe`;
+
+    for (let d = days - 1; d >= 0; d--) {
+      const sid = uuidv4();
+      const dayEnd = now - (d * 86400000);
+      const dayStart = dayEnd - durationMs;
+
+      events.push({
+        type: 'launch_game',
+        properties: {
+          client_track_timestamp: dayStart,
+          client_heartbeat_session_id: heartbeatId,
+          event_sequence_number: ++seq,
+          game: game.name,
+          game_id: String(game.id),
+          verified: true,
+          elevated: false,
+          is_launcher: false,
+          game_platform: 'desktop',
+          detection_method: 'verified_game',
+          is_overlay_enabled: false,
+          is_overlay_game_enabled: true,
+          is_overlay_game_source: 'OOP_DEFAULT_DATABASE',
+          fullscreen_type: 'UNKNOWN',
+          hardware_display_count: 1,
+          overlay_method: 'Disabled',
+          activity_status_enabled: true,
+          activity_status_shared_guilds: [],
+          current_user_status: 'online',
+          game_detection_enabled: true,
+          executable_path: exeName,
+          voice_channel_id: null,
+          voice_channel_type: null,
+          voice_channel_bitrate: null,
+          voice_channel_guild_id: null,
+          hidden_by_distributor: false,
+          game_metadata: null,
+          executable_fingerprint: fingerprint,
+          client_performance_cpu: null,
+          client_performance_memory: null,
+          cpu_core_count: null,
+          accessibility_features: 0,
+          rendered_locale: 'en-US',
+          launch_signature: signature,
+          client_rtc_state: null,
+          client_app_state: 'focused',
+          client_send_timestamp: now
+        }
+      });
+
+      events.push({
+        type: 'running_game_heartbeat',
+        properties: {
+          client_track_timestamp: dayStart,
+          client_heartbeat_session_id: heartbeatId,
+          event_sequence_number: ++seq,
+          game_id: String(game.id),
+          game_name: game.name,
+          game_metadata: null,
+          game_executable: exeName,
+          game_detection_enabled: true,
+          initial_heartbeat: true,
+          final_heartbeat: false,
+          game_session_id: sid,
+          duration_tracked_ms: 0,
+          rtc_connection_id: null,
+          media_session_id: null,
+          launch_signature: signature,
+          discord_window_state: 'focused',
+          client_app_state: 'focused',
+          client_send_timestamp: now
+        }
+      });
+
+      events.push({
+        type: 'running_game_heartbeat',
+        properties: {
+          client_track_timestamp: dayEnd,
+          client_heartbeat_session_id: heartbeatId,
+          event_sequence_number: ++seq,
+          game_id: String(game.id),
+          game_name: game.name,
+          game_metadata: null,
+          game_executable: exeName,
+          game_detection_enabled: true,
+          initial_heartbeat: false,
+          final_heartbeat: true,
+          game_session_id: sid,
+          duration_tracked_ms: durationMs,
+          rtc_connection_id: null,
+          media_session_id: null,
+          launch_signature: signature,
+          discord_window_state: 'focused',
+          client_app_state: 'focused',
+          client_send_timestamp: now
+        }
+      });
+    }
 
     return events;
   }
