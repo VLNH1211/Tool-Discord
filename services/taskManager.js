@@ -721,8 +721,6 @@ class TaskManager {
       totalAccumulatedHours: (this.accumulatedPlaytimeSeconds / 3600).toFixed(1)
     };
   }
-    };
-  }
 
   /**
    * TURBO DIVERSITY INJECTOR: Bơm siêu tốc hàng trăm / hàng nghìn game khác nhau vào Discord Analytics
