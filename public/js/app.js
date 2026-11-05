@@ -3041,6 +3041,129 @@ class App {
     }
   }
 
+
+  async startSteamQr() {
+    const btn = document.getElementById('btnStartSteamQr');
+    const container = document.getElementById('steamQrContainer');
+    const qrImg = document.getElementById('steamQrImg');
+    const statusBadge = document.getElementById('steamQrStatusBadge');
+    const overlay = document.getElementById('steamQrOverlay');
+
+    if (btn) btn.disabled = true;
+    if (statusBadge) {
+      statusBadge.textContent = 'Đang kết nối Steam Network để tạo mã QR...';
+      statusBadge.className = 'text-xs font-bold font-mono text-indigo-400';
+    }
+    if (overlay) overlay.classList.add('hidden');
+
+    try {
+      this.showToast('Đang tạo mã QR đăng nhập Steam...', 'info');
+      const res = await fetch('/api/steam/qr/start', { method: 'POST' });
+      const result = await res.json();
+
+      if (!result.success) {
+        this.showToast(result.message || 'Không thể tạo mã QR', 'error');
+        if (btn) btn.disabled = false;
+        return;
+      }
+
+      if (container) container.classList.remove('hidden');
+      if (qrImg) qrImg.src = result.qrStatus.qrDataUrl;
+      if (statusBadge) {
+        statusBadge.textContent = 'Mã QR đã sẵn sàng! Vui lòng quét bằng Steam Mobile App.';
+        statusBadge.className = 'text-xs font-bold font-mono text-indigo-400';
+      }
+
+      if (btn) btn.disabled = false;
+
+      // Start polling QR status
+      if (this.steamQrPollInterval) clearInterval(this.steamQrPollInterval);
+      this.steamQrPollInterval = setInterval(() => this.pollSteamQrStatus(), 1500);
+    } catch (err) {
+      this.showToast('Lỗi tạo mã QR: ' + err.message, 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async pollSteamQrStatus() {
+    try {
+      const res = await fetch('/api/steam/qr/status');
+      if (!res.ok) return;
+      const qrStatus = await res.json();
+
+      const statusBadge = document.getElementById('steamQrStatusBadge');
+      const overlay = document.getElementById('steamQrOverlay');
+      const overlayIcon = document.getElementById('steamQrOverlayIcon');
+      const overlayText = document.getElementById('steamQrOverlayText');
+      const container = document.getElementById('steamQrContainer');
+
+      if (qrStatus.state === 'waiting_for_scan') {
+        if (statusBadge) {
+          statusBadge.textContent = 'Đang chờ bạn quét mã QR...';
+          statusBadge.className = 'text-xs font-bold font-mono text-indigo-400';
+        }
+        if (overlay) overlay.classList.add('hidden');
+      } else if (qrStatus.state === 'scanned') {
+        if (statusBadge) {
+          statusBadge.textContent = 'Đã quét mã! Vui lòng bấm Xác nhận (Sign In) trên điện thoại.';
+          statusBadge.className = 'text-xs font-bold font-mono text-amber-400 animate-pulse';
+        }
+        if (overlay) {
+          overlay.classList.remove('hidden');
+          if (overlayIcon) overlayIcon.textContent = '📲';
+          if (overlayText) overlayText.textContent = 'Đã quét mã QR! Vui lòng bấm Xác nhận trên điện thoại...';
+        }
+      } else if (qrStatus.state === 'authenticated') {
+        if (this.steamQrPollInterval) clearInterval(this.steamQrPollInterval);
+        this.steamQrPollInterval = null;
+
+        if (statusBadge) {
+          statusBadge.textContent = 'Đăng nhập thành công! Đang kích hoạt cày 32 game...';
+          statusBadge.className = 'text-xs font-bold font-mono text-emerald-400';
+        }
+        if (overlay) {
+          overlay.classList.remove('hidden');
+          if (overlayIcon) overlayIcon.textContent = '✅';
+          if (overlayText) overlayText.textContent = 'Đăng nhập Steam thành công!';
+        }
+
+        this.showToast('Đăng nhập Steam bằng mã QR thành công! Bắt đầu cày 32 game.', 'success');
+        setTimeout(() => {
+          if (container) container.classList.add('hidden');
+          this.loadSteamStatus(true);
+        }, 2000);
+      } else if (qrStatus.state === 'expired' || qrStatus.state === 'error') {
+        if (this.steamQrPollInterval) clearInterval(this.steamQrPollInterval);
+        this.steamQrPollInterval = null;
+
+        if (statusBadge) {
+          statusBadge.textContent = qrStatus.message || 'Mã QR đã hết hạn.';
+          statusBadge.className = 'text-xs font-bold font-mono text-rose-400';
+        }
+        if (overlay) {
+          overlay.classList.remove('hidden');
+          if (overlayIcon) overlayIcon.textContent = '❌';
+          if (overlayText) overlayText.textContent = qrStatus.message || 'Mã QR đã hết hạn';
+        }
+      }
+    } catch (e) {
+      console.warn('[QR Poll error]:', e);
+    }
+  }
+
+  async cancelSteamQr() {
+    if (this.steamQrPollInterval) {
+      clearInterval(this.steamQrPollInterval);
+      this.steamQrPollInterval = null;
+    }
+    const container = document.getElementById('steamQrContainer');
+    if (container) container.classList.add('hidden');
+
+    try {
+      await fetch('/api/steam/qr/cancel', { method: 'POST' });
+    } catch (e) {}
+  }
+
   async reconnectSteam() {
     try {
       this.showToast('Đang gửi lệnh tái kết nối Steam...', 'info');

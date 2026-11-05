@@ -1,4 +1,6 @@
 const SteamUser = require('steam-user');
+const { LoginSession, EAuthTokenPlatformType } = require('steam-session');
+const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 
@@ -31,7 +33,7 @@ const GAMES_LIST = [
   { appId: 1203220, name: 'NARAKA: BLADEPOINT', initialPlaytime: '0.0h' },
   { appId: 1240440, name: 'Halo Infinite', initialPlaytime: '0.0h' },
   { appId: 1282270, name: 'Strinova', initialPlaytime: '0.0h' },
-  { appId: 1367080, name: 'MOBILE SUIT GUNDAM BATTLE OPERATION 2', initialPlaytime: '0.0h' },
+  { appId: 1367080, name: 'MOBILE FORCE GUNDAM BATTLE OPERATION 2', initialPlaytime: '0.0h' },
   { appId: 1531430, name: 'Paragon: The Overprime', initialPlaytime: '0.0h' },
   { appId: 1629910, name: 'Souls of Chronos', initialPlaytime: '0.0h' },
   { appId: 1638660, name: 'Blood Spear', initialPlaytime: '0.0h' },
@@ -57,23 +59,32 @@ class SteamBoosterService {
     this.lastCodeWrong = false;
     this.credentials = {
       username: '',
-      password: ''
+      password: '',
+      refreshToken: ''
+    };
+    this.activeQrSession = null;
+    this.qrStatus = {
+      state: 'idle', // 'idle' | 'generating' | 'waiting_for_scan' | 'scanned' | 'authenticated' | 'expired' | 'error'
+      message: 'Sẵn sàng tạo mã QR đăng nhập.',
+      qrDataUrl: '',
+      qrUrl: '',
+      expiresAt: null
     };
   }
 
   loadConfig() {
-    // 1. Thử đọc từ biến môi trường
     let username = process.env.STEAM_USERNAME || '';
     let password = process.env.STEAM_PASSWORD || '';
+    let refreshToken = process.env.STEAM_REFRESH_TOKEN || '';
 
-    // 2. Thử đọc từ tệp cấu hình cục bộ nếu biến môi trường chưa có
-    if (!username || !password) {
+    if (!refreshToken && (!username || !password)) {
       try {
         if (fs.existsSync(CONFIG_PATH)) {
           const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
           const data = JSON.parse(raw);
           username = username || data.username || '';
           password = password || data.password || '';
+          refreshToken = refreshToken || data.refreshToken || '';
         }
       } catch (err) {
         console.warn('[SteamBooster] Không thể đọc steam_config.json:', err.message);
@@ -82,14 +93,21 @@ class SteamBoosterService {
 
     this.credentials.username = username;
     this.credentials.password = password;
+    this.credentials.refreshToken = refreshToken;
   }
 
-  saveConfig(username, password) {
-    this.credentials.username = username;
-    this.credentials.password = password;
+  saveConfig(username, password, refreshToken = '') {
+    if (username) this.credentials.username = username;
+    if (password) this.credentials.password = password;
+    if (refreshToken) this.credentials.refreshToken = refreshToken;
+
     try {
       fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify({ username, password }, null, 2), 'utf-8');
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify({
+        username: this.credentials.username,
+        password: this.credentials.password,
+        refreshToken: this.credentials.refreshToken
+      }, null, 2), 'utf-8');
     } catch (err) {
       console.warn('[SteamBooster] Lỗi lưu cấu hình:', err.message);
     }
@@ -105,11 +123,11 @@ class SteamBoosterService {
 
     this.setupEvents();
 
-    if (this.credentials.username && this.credentials.password) {
+    if (this.credentials.refreshToken || (this.credentials.username && this.credentials.password)) {
       this.attemptLogin();
     } else {
-      this.statusText = 'Chờ cấu hình tài khoản (STEAM_USERNAME / STEAM_PASSWORD)';
-      console.log('[SteamBooster] Chưa cấu hình STEAM_USERNAME hoặc STEAM_PASSWORD. Sẵn sàng cấu hình qua Web UI hoặc biến môi trường.');
+      this.statusText = 'Chờ cấu hình tài khoản (Quét mã QR hoặc nhập tài khoản)';
+      console.log('[SteamBooster] Sẵn sàng đăng nhập Steam qua mã QR hoặc biểu mẫu tài khoản.');
     }
   }
 
@@ -121,12 +139,12 @@ class SteamBoosterService {
       this.lastCodeWrong = false;
       this.loginTime = Date.now();
       this.steamId64 = this.client.steamID ? this.client.steamID.getSteamID64() : '';
-      this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game`;
+      this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game 0h`;
 
       console.log(`[SteamBooster] Đăng nhập thành công! SteamID64: ${this.steamId64}`);
       this.client.setPersona(SteamUser.EPersonaState.Online);
       this.client.gamesPlayed(APP_IDS);
-      console.log(`[SteamBooster] Đã kích hoạt 32 game. Tốc độ: +32h mỗi 1 giờ thực (+768h/ngày).`);
+      console.log(`[SteamBooster] Đã kích hoạt 32 game 0h. Tốc độ: +32h mỗi 1 giờ thực (+768h/ngày).`);
     });
 
     this.client.on('steamGuard', (domain, callback, lastCodeWrong) => {
@@ -136,18 +154,18 @@ class SteamBoosterService {
       this.lastCodeWrong = Boolean(lastCodeWrong);
       this.statusText = `Yêu cầu mã Steam Guard ${domain ? `(Email: ${domain})` : '(Mobile Authenticator)'}`;
 
-      console.warn(`[SteamBooster] Yêu cầu mã Steam Guard từ ${domain || 'ứng dụng di động'}. Vui lòng nhập mã trên Web UI.`);
+      console.warn(`[SteamBooster] Yêu cầu mã Steam Guard từ ${domain || 'ứng dụng di động'}.`);
     });
 
     this.client.on('playingState', (blocked, playingApp) => {
       if (blocked) {
         this.isBlockedByLocal = true;
         this.statusText = `Tạm dừng: Bạn đang chơi game trên PC (AppID: ${playingApp || 'Chưa rõ'}). Đang nhường quyền.`;
-        console.log(`[SteamBooster] Phát hiện bạn đang chơi game trên PC. Tạm dừng cày để nhường quyền ưu tiên.`);
+        console.log(`[SteamBooster] Phát hiện chơi game trên PC. Tạm dừng để nhường quyền ưu tiên.`);
       } else {
         if (this.isBlockedByLocal) {
           this.isBlockedByLocal = false;
-          this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game`;
+          this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game 0h`;
           console.log(`[SteamBooster] Phiên chơi PC kết thúc. Tự động tiếp tục cày 32 game.`);
           this.client.gamesPlayed(APP_IDS);
         }
@@ -162,31 +180,148 @@ class SteamBoosterService {
 
     this.client.on('disconnected', (eresult, msg) => {
       this.isLoggedOn = false;
-      this.statusText = `Mất kết nối Steam (Mã: ${eresult} - ${msg || 'Unknown'}). Đang chờ tự động kết nối lại...`;
+      this.statusText = `Mất kết nối Steam (Mã: ${eresult} - ${msg || 'Unknown'}). Chờ kết nối lại...`;
       console.warn(`[SteamBooster] Mất kết nối: ${eresult} - ${msg}`);
     });
   }
 
   attemptLogin() {
-    if (!this.credentials.username || !this.credentials.password) {
-      this.statusText = 'Thiếu thông tin đăng nhập Steam';
-      return false;
+    // 1. Ưu tiên đăng nhập bằng Refresh Token từ phiên quét mã QR
+    if (this.credentials.refreshToken) {
+      this.statusText = 'Đang đăng nhập bằng phiên ủy quyền QR (Refresh Token)...';
+      console.log('[SteamBooster] Đang đăng nhập Steam bằng Refresh Token đã lưu...');
+      try {
+        this.client.logOn({
+          refreshToken: this.credentials.refreshToken
+        });
+        return true;
+      } catch (err) {
+        this.statusText = `Lỗi đăng nhập Refresh Token: ${err.message}`;
+        console.error('[SteamBooster] Lỗi đăng nhập Refresh Token:', err.message);
+      }
     }
 
-    this.statusText = `Đang kết nối tài khoản: ${this.credentials.username}...`;
-    console.log(`[SteamBooster] Đang gửi yêu cầu đăng nhập tài khoản: ${this.credentials.username}`);
+    // 2. Đăng nhập bằng tên tài khoản và mật khẩu
+    if (this.credentials.username && this.credentials.password) {
+      this.statusText = `Đang kết nối tài khoản: ${this.credentials.username}...`;
+      console.log(`[SteamBooster] Đang gửi yêu cầu đăng nhập tài khoản: ${this.credentials.username}`);
+      try {
+        this.client.logOn({
+          accountName: this.credentials.username,
+          password: this.credentials.password
+        });
+        return true;
+      } catch (err) {
+        this.statusText = `Lỗi đăng nhập: ${err.message}`;
+        console.error('[SteamBooster] Lỗi khi gọi logOn:', err.message);
+        return false;
+      }
+    }
+
+    this.statusText = 'Thiếu thông tin đăng nhập Steam';
+    return false;
+  }
+
+  // --- QUÉT MÃ QR STEAM LOGIN (STEAM MOBILE APP) ---
+  async startQrLogin() {
+    if (this.activeQrSession) {
+      try {
+        this.activeQrSession.cancelLoginAttempt();
+      } catch (e) {}
+      this.activeQrSession = null;
+    }
+
+    const session = new LoginSession(EAuthTokenPlatformType.SteamClient);
+    this.activeQrSession = session;
+
+    this.qrStatus = {
+      state: 'generating',
+      message: 'Đang kết nối Steam Network để tạo mã QR...',
+      qrDataUrl: '',
+      qrUrl: '',
+      expiresAt: Date.now() + 180000
+    };
 
     try {
-      this.client.logOn({
-        accountName: this.credentials.username,
-        password: this.credentials.password
+      const res = await session.startWithQR();
+      this.qrStatus.state = 'waiting_for_scan';
+      this.qrStatus.qrUrl = res.qrChallengeUrl;
+
+      // Sinh ảnh Base64 Data URL của mã QR
+      this.qrStatus.qrDataUrl = await QRCode.toDataURL(res.qrChallengeUrl, {
+        margin: 2,
+        scale: 6,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
       });
-      return true;
+      this.qrStatus.message = 'Mở ứng dụng Steam trên điện thoại và quét mã QR này.';
+
+      // Người dùng đã quét mã trên điện thoại
+      session.on('remoteInteraction', () => {
+        console.log('[SteamBooster QR] Đã quét mã QR! Chờ người dùng bấm xác nhận trên điện thoại...');
+        this.qrStatus.state = 'scanned';
+        this.qrStatus.message = 'Đã quét mã! Vui lòng nhấn "Xác nhận đăng nhập" (Sign in) trên điện thoại.';
+      });
+
+      // Người dùng đã phê duyệt đăng nhập trên điện thoại
+      session.on('authenticated', async () => {
+        const steamId = session.steamID ? session.steamID.getSteamID64() : '';
+        console.log(`[SteamBooster QR] Phê duyệt QR thành công! SteamID: ${steamId}`);
+        this.qrStatus.state = 'authenticated';
+        this.qrStatus.message = 'Xác thực thành công! Đang lưu phiên và tự động cày 32 game...';
+
+        this.credentials.refreshToken = session.refreshToken;
+        this.credentials.username = session.accountName || this.credentials.username || `SteamID_${steamId}`;
+        this.saveConfig(this.credentials.username, this.credentials.password, session.refreshToken);
+
+        try {
+          if (this.client) this.client.logOff();
+        } catch (e) {}
+
+        setTimeout(() => {
+          this.attemptLogin();
+        }, 1200);
+      });
+
+      session.on('timeout', () => {
+        this.qrStatus.state = 'expired';
+        this.qrStatus.message = 'Mã QR đã hết hạn. Vui lòng bấm tạo mã mới.';
+      });
+
+      session.on('error', (err) => {
+        this.qrStatus.state = 'error';
+        this.qrStatus.message = `Lỗi xác thực QR: ${err.message}`;
+      });
+
+      return { success: true, qrStatus: this.qrStatus };
     } catch (err) {
-      this.statusText = `Lỗi đăng nhập: ${err.message}`;
-      console.error('[SteamBooster] Lỗi khi gọi logOn:', err.message);
-      return false;
+      this.qrStatus.state = 'error';
+      this.qrStatus.message = `Không thể tạo mã QR: ${err.message}`;
+      return { success: false, message: err.message };
     }
+  }
+
+  getQrStatus() {
+    return this.qrStatus;
+  }
+
+  cancelQrLogin() {
+    if (this.activeQrSession) {
+      try {
+        this.activeQrSession.cancelLoginAttempt();
+      } catch (e) {}
+      this.activeQrSession = null;
+    }
+    this.qrStatus = {
+      state: 'idle',
+      message: 'Đã hủy phiên QR.',
+      qrDataUrl: '',
+      qrUrl: '',
+      expiresAt: null
+    };
+    return { success: true };
   }
 
   submitGuardCode(code) {
@@ -208,7 +343,6 @@ class SteamBoosterService {
       }
     }
 
-    // Nếu không có callback đang chờ, thử login lại kèm 2FA code
     if (this.credentials.username && this.credentials.password) {
       try {
         this.client.logOn({
@@ -252,7 +386,8 @@ class SteamBoosterService {
     }
 
     return {
-      configured: Boolean(this.credentials.username && this.credentials.password),
+      configured: Boolean(this.credentials.refreshToken || (this.credentials.username && this.credentials.password)),
+      hasRefreshToken: Boolean(this.credentials.refreshToken),
       username: maskedUsername,
       rawUsername: this.credentials.username,
       isLoggedOn: this.isLoggedOn,
@@ -269,7 +404,8 @@ class SteamBoosterService {
       ratePerHour: GAMES_LIST.length,
       ratePerDay: GAMES_LIST.length * 24,
       gamesCount: GAMES_LIST.length,
-      games: GAMES_LIST
+      games: GAMES_LIST,
+      qrStatus: this.qrStatus
     };
   }
 }

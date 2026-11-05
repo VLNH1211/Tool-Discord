@@ -1177,6 +1177,52 @@
           </div>
         </div>
 
+        
+        <!-- STEAM QR CODE LOGIN HERO PANEL -->
+        <div class="bg-gradient-to-r from-[#1e1f22] to-[#2b2d31] p-5 rounded-xl border border-indigo-500/30 shadow-lg space-y-4">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                <span class="text-lg">📲</span>
+                <span class="text-indigo-400">Đăng Nhập Bằng Mã QR Steam (Khuyên Dùng)</span>
+                <span class="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">1 Chạm - Không Cần Mật Khẩu</span>
+              </h3>
+              <p class="text-xs text-[#949ba4] mt-1">
+                Sử dụng ứng dụng Steam Mobile trên điện thoại để quét mã QR. Sau khi quét và bấm Xác nhận, tài khoản sẽ tự động kết nối và cày 32 trò chơi 24/7.
+              </p>
+            </div>
+            <div>
+              <button id="btnStartSteamQr" class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center space-x-2 cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+                <span>Tạo Mã QR Đăng Nhập Steam</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- QR Display Area (Initially hidden, shown when generated) -->
+          <div id="steamQrContainer" class="hidden bg-[#18191c] p-6 rounded-xl border border-[#3f4147] flex flex-col items-center justify-center space-y-4">
+            <div id="steamQrBox" class="bg-white p-3 rounded-2xl shadow-2xl relative">
+              <img id="steamQrImg" class="w-56 h-56 object-contain" alt="Steam Login QR Code" />
+              <div id="steamQrOverlay" class="hidden absolute inset-0 bg-black/85 rounded-2xl flex flex-col items-center justify-center p-4 text-center">
+                <span id="steamQrOverlayIcon" class="text-3xl mb-2 animate-bounce">📲</span>
+                <span id="steamQrOverlayText" class="text-xs font-bold text-white">Đang xử lý...</span>
+              </div>
+            </div>
+
+            <div class="text-center space-y-1 max-w-sm">
+              <div id="steamQrStatusBadge" class="text-xs font-bold font-mono text-indigo-400">Đang chờ quét mã QR...</div>
+              <p id="steamQrInstruction" class="text-[11px] text-[#949ba4]">Mở ứng dụng Steam trên điện thoại > Chạm biểu tượng Steam Guard hoặc Quét QR > Hướng camera vào mã trên.</p>
+            </div>
+
+            <div class="flex items-center space-x-3 pt-1">
+              <button id="btnCancelSteamQr" class="bg-[#2b2d31] hover:bg-[#383a40] text-xs text-[#949ba4] hover:text-white px-3.5 py-1.5 rounded-lg border border-[#3f4147]">
+                Đóng / Hủy Phiên QR
+              </button>
+            </div>
+          </div>
+        </div>
+
+
         <!-- Cấu hình tài khoản Steam qua Web UI -->
         <div class="bg-[#242629] p-5 rounded-xl border border-[#3f4147] space-y-4">
           <div class="flex items-center justify-between">

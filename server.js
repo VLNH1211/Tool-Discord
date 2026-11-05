@@ -713,6 +713,24 @@ app.post('/api/steam/config', (req, res) => {
   res.json({ success: true, message: 'Đã lưu cấu hình tài khoản Steam và đang kết nối...' });
 });
 
+// --- STEAM QR CODE AUTHENTICATION (STEAM MOBILE APP) ---
+app.post('/api/steam/qr/start', async (req, res) => {
+  try {
+    const result = await steamBooster.startQrLogin();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/steam/qr/status', (req, res) => {
+  res.json(steamBooster.getQrStatus());
+});
+
+app.post('/api/steam/qr/cancel', (req, res) => {
+  res.json(steamBooster.cancelQrLogin());
+});
+
 // --- CLOUD HEALTH CHECK & UPTIME MONITORING ---
 app.get('/health', (req, res) => {
   res.json({
