@@ -2932,16 +2932,22 @@ class App {
       }
 
       // Render 32 games
-      if (gamesList && gamesList.children.length === 0 && data.games && data.games.length > 0) {
+      if (gamesList && data.games && data.games.length > 0) {
         gamesList.innerHTML = data.games.map((g, idx) => {
           return `
-            <div class="bg-[#1e1f22] p-2.5 rounded-xl border border-[#383a40] flex flex-col justify-between space-y-1.5 hover:border-emerald-500/40 transition-all">
+            <div class="bg-[#1e1f22] p-2.5 rounded-xl border border-[#3f4147] flex flex-col justify-between space-y-1.5 hover:border-amber-500/40 transition-all">
               <div class="flex items-center justify-between">
                 <span class="text-[10px] font-mono text-[#949ba4]">#${idx + 1}</span>
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="bg-amber-500/20 text-amber-300 text-[9px] font-mono px-1.5 py-0.5 rounded border border-amber-500/30 font-bold">0.0h Gốc</span>
               </div>
               <div class="text-xs font-bold text-white truncate" title="${g.name}">${g.name}</div>
-              <div class="text-[10px] font-mono text-emerald-400">AppID: ${g.appId}</div>
+              <div class="flex items-center justify-between text-[10px] font-mono">
+                <span class="text-[#949ba4]">ID: ${g.appId}</span>
+                <span class="text-emerald-400 flex items-center space-x-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>+1h/h</span>
+                </span>
+              </div>
             </div>
           `;
         }).join('');
