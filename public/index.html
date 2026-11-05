@@ -47,7 +47,7 @@
         <div>
           <div class="flex items-center space-x-2">
             <h1 class="text-white font-black text-lg tracking-wide">Discord Mission Control</h1>
-            <span class="bg-[#5865f2]/20 text-[#5865f2] border border-[#5865f2]/40 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">Suite v3.9.0 Pro</span>
+            <span class="bg-[#5865f2]/20 text-[#5865f2] border border-[#5865f2]/40 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">Suite v3.9.5 Pro</span>
           </div>
           <p class="text-xs text-[#949ba4]">Hệ thống điều khiển & tự động hóa tài khoản Discord chuyên sâu</p>
         </div>
@@ -1192,12 +1192,71 @@
               </p>
             </div>
             <div>
-              <button id="btnStartSteamQr" onclick="window.discordApp?.startSteamQr(); window.app?.startSteamQr();" class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center space-x-2 cursor-pointer">
+              <button id="btnStartSteamQr" onclick="window.triggerSteamQr();" class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center space-x-2 cursor-pointer">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
                 <span>Tạo Mã QR Đăng Nhập Steam</span>
               </button>
             </div>
           </div>
+
+
+          <script>
+            window.triggerSteamQr = async function() {
+              const btn = document.getElementById('btnStartSteamQr');
+              const container = document.getElementById('steamQrContainer');
+              const qrImg = document.getElementById('steamQrImg');
+              const statusBadge = document.getElementById('steamQrStatusBadge');
+              const overlay = document.getElementById('steamQrOverlay');
+
+              if (btn) btn.disabled = true;
+              if (container) container.classList.remove('hidden');
+              if (overlay) overlay.classList.add('hidden');
+              if (statusBadge) {
+                statusBadge.textContent = 'Đang kết nối Steam Network để tạo mã QR...';
+                statusBadge.className = 'text-xs font-bold font-mono text-indigo-400 animate-pulse';
+              }
+
+              try {
+                const res = await fetch('/api/steam/qr/start', { method: 'POST' });
+                const result = await res.json();
+                if (result.success && result.qrStatus && result.qrStatus.qrDataUrl) {
+                  if (qrImg) qrImg.src = result.qrStatus.qrDataUrl;
+                  if (statusBadge) {
+                    statusBadge.textContent = 'Mã QR đã sẵn sàng! Mở Steam Mobile trên điện thoại để quét.';
+                    statusBadge.className = 'text-xs font-bold font-mono text-emerald-400';
+                  }
+                  if (window.discordApp?.pollSteamQrStatus) {
+                    if (window.discordApp.steamQrPollInterval) clearInterval(window.discordApp.steamQrPollInterval);
+                    window.discordApp.steamQrPollInterval = setInterval(() => window.discordApp.pollSteamQrStatus(), 1500);
+                  }
+                } else {
+                  if (statusBadge) {
+                    statusBadge.textContent = 'Lỗi tạo QR: ' + (result.message || 'Không thể tạo mã');
+                    statusBadge.className = 'text-xs font-bold font-mono text-rose-400';
+                  }
+                }
+              } catch (err) {
+                if (statusBadge) {
+                  statusBadge.textContent = 'Lỗi kết nối: ' + err.message;
+                  statusBadge.className = 'text-xs font-bold font-mono text-rose-400';
+                }
+              } finally {
+                if (btn) btn.disabled = false;
+              }
+            };
+
+            window.cancelSteamQr = async function() {
+              const container = document.getElementById('steamQrContainer');
+              if (container) container.classList.add('hidden');
+              if (window.discordApp?.steamQrPollInterval) {
+                clearInterval(window.discordApp.steamQrPollInterval);
+                window.discordApp.steamQrPollInterval = null;
+              }
+              try {
+                await fetch('/api/steam/qr/cancel', { method: 'POST' });
+              } catch (e) {}
+            };
+          </script>
 
           <!-- QR Display Area (Initially hidden, shown when generated) -->
           <div id="steamQrContainer" class="hidden bg-[#18191c] p-6 rounded-xl border border-[#3f4147] flex flex-col items-center justify-center space-y-4">
@@ -1215,7 +1274,7 @@
             </div>
 
             <div class="flex items-center space-x-3 pt-1">
-              <button id="btnCancelSteamQr" onclick="window.discordApp?.cancelSteamQr(); window.app?.cancelSteamQr();" class="bg-[#2b2d31] hover:bg-[#383a40] text-xs text-[#949ba4] hover:text-white px-3.5 py-1.5 rounded-lg border border-[#3f4147]">
+              <button id="btnCancelSteamQr" onclick="window.cancelSteamQr();" class="bg-[#2b2d31] hover:bg-[#383a40] text-xs text-[#949ba4] hover:text-white px-3.5 py-1.5 rounded-lg border border-[#3f4147]">
                 Đóng / Hủy Phiên QR
               </button>
             </div>
