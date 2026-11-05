@@ -557,10 +557,11 @@ class TaskManager {
     if (!game) return;
 
     const hours = Math.max(1, parseInt(hoursToInject) || 10);
-    this.addLog(`⚡ [TỰ ĐỘNG BƠM GIỜ] Đã cày tròn ${currentHour} tiếng AFK liên tục! Đang tự động nạp ngầm +${hours} giờ chơi cho "${game.name}" với chuẩn PE Fingerprint & Sliced History...`, 'WARN');
+    const dayOffset = (this.playtimeTask.autoInjectCount || 0) + 1;
+    this.addLog(`⚡ [TỰ ĐỘNG BƠM GIỜ] Đã cày tròn ${currentHour} tiếng AFK liên tục! Đang tự động nạp ngầm +${hours} giờ chơi cho "${game.name}" vào ${dayOffset} ngày trước (Tránh trùng lặp mốc thời gian, chuẩn PE Fingerprint)...`, 'WARN');
 
     try {
-      const events = discordClient.buildSlicedHistoryEvents(game, this.user.profile?.id, hours, { maxHoursPerDay: 10 });
+      const events = discordClient.buildSlicedHistoryEvents(game, this.user.profile?.id, hours, { maxHoursPerDay: 10, startDayOffset: dayOffset });
       const res = await discordClient.sendScienceEvents(this.user.token, this.user.analyticsToken, events);
 
       if (res.success) {
@@ -570,7 +571,7 @@ class TaskManager {
         this._savePlaytimeStats();
 
         const currentTotal = ((this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds) / 3600).toFixed(2);
-        this.addLog(`🎉 [TỰ ĐỘNG NẠP THÀNH CÔNG] Đã nạp thành công +${hours}h vào Discord (Chuẩn Windows PE Fingerprint)! Tổng tích lũy: ${currentTotal}h.`, 'SUCCESS');
+        this.addLog(`🎉 [TỰ ĐỘNG NẠP THÀNH CÔNG] Đã nạp thành công +${hours}h vào Discord (Mốc ${dayOffset} ngày trước, không trùng lặp)! Tổng tích lũy: ${currentTotal}h.`, 'SUCCESS');
         this.broadcastSSE('playtime_status', this.getPlaytimeStatus());
       } else {
         this.addLog(`⚠️ [TỰ ĐỘNG NẠP Cảnh báo] Discord từ chối nạp tự động +${hours}h: ${res.message}`, 'WARN');
@@ -646,7 +647,7 @@ class TaskManager {
     };
 
     // Build verified sliced history events across recent days (max 20h/day to evade single-day anomaly check)
-    const allEvents = discordClient.buildSlicedHistoryEvents(game, this.user.profile?.id, hours, { maxHoursPerDay: 20 });
+    const allEvents = discordClient.buildSlicedHistoryEvents(game, this.user.profile?.id, hours, { maxHoursPerDay: 20, startDayOffset: 1 });
     const totalDays = Math.ceil(hours / 20);
 
     // Each day has 3 events (launch, initial heartbeat, final heartbeat)

@@ -269,6 +269,7 @@ class DiscordClient {
    */
   buildSlicedHistoryEvents(game, userId, totalHours, options = {}) {
     const maxHoursPerDay = options.maxHoursPerDay || 20;
+    const startDayOffset = Math.max(0, parseInt(options.startDayOffset) || 0);
     const hours = Math.max(1, parseInt(totalHours) || 10);
     const days = Math.ceil(hours / maxHoursPerDay);
     const hoursPerDay = hours / days;
@@ -284,7 +285,8 @@ class DiscordClient {
 
     for (let d = days - 1; d >= 0; d--) {
       const sid = uuidv4();
-      const dayEnd = now - (d * 86400000);
+      const targetDay = d + startDayOffset;
+      const dayEnd = now - (targetDay * 86400000);
       const dayStart = dayEnd - durationMs;
 
       events.push({
