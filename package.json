@@ -1,6 +1,6 @@
 {
   "name": "discord-activity-automator",
-  "version": "2.5.0",
+  "version": "3.9.0",
   "description": "Discord Activity Badges & Quests Automation Web Dashboard with Reverse-Engineered Science Telemetry",
   "main": "server.js",
   "scripts": {
