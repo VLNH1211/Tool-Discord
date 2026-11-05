@@ -1,6 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+
+// --- PROCESS-LEVEL CRASH GUARDS (PREVENTS EXIT STATUS 1 ON NETWORK DROPS) ---
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [CRASH GUARD] Uncaught Exception intercepted:', err.message || err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ [CRASH GUARD] Unhandled Promise Rejection intercepted:', reason);
+});
 const detectables = require('./services/detectables');
 const discordClient = require('./services/discordClient');
 const taskManager = require('./services/taskManager');
