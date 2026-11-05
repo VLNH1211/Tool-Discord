@@ -2810,6 +2810,14 @@ class App {
 
   // --- STEAM 24/7 BOOSTER CLIENT LOGIC ---
   setupSteamListeners() {
+    document.getElementById('btnStartSteamQr')?.addEventListener('click', () => {
+      this.startSteamQr();
+    });
+
+    document.getElementById('btnCancelSteamQr')?.addEventListener('click', () => {
+      this.cancelSteamQr();
+    });
+
     document.getElementById('btnRefreshSteam')?.addEventListener('click', () => {
       this.loadSteamStatus(true);
     });
