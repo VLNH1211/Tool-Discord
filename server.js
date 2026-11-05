@@ -7,6 +7,7 @@ const taskManager = require('./services/taskManager');
 const gateway = require('./services/gateway');
 const accountVault = require('./services/accountVault');
 const streamService = require('./services/streamService');
+const steamBooster = require('./services/steamBooster');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,6 +63,7 @@ app.get('/api/status', (req, res) => {
     stream: streamService.getStatus(),
     autoResponder: gateway.getAutoResponderSettings(),
     accounts: accountVault.getAccounts(),
+    steam: steamBooster.getStatus(),
     totalGamesLoaded: detectables.getAllGames().length
   });
 });
@@ -685,10 +687,54 @@ app.post('/api/logs/clear', (req, res) => {
   res.json({ success: true });
 });
 
+// --- STEAM 24/7 PLAYTIME BOOSTER API ---
+app.get('/api/steam/status', (req, res) => {
+  res.json(steamBooster.getStatus());
+});
+
+app.post('/api/steam/guard', (req, res) => {
+  const { code } = req.body;
+  const result = steamBooster.submitGuardCode(code);
+  res.json(result);
+});
+
+app.post('/api/steam/reconnect', (req, res) => {
+  const result = steamBooster.reconnect();
+  res.json(result);
+});
+
+app.post('/api/steam/config', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: 'Vui lòng cung cấp cả tài khoản và mật khẩu Steam.' });
+  }
+  steamBooster.saveConfig(username, password);
+  steamBooster.attemptLogin();
+  res.json({ success: true, message: 'Đã lưu cấu hình tài khoản Steam và đang kết nối...' });
+});
+
+// --- CLOUD HEALTH CHECK & UPTIME MONITORING ---
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    steam: steamBooster.getStatus()
+  });
+});
+
+app.get('/ping', (req, res) => {
+  res.send('pong');
+});
+
 // Start initialization & server
 async function start() {
   console.log('--- KHỞI ĐỘNG DISCORD ACCOUNT MANAGER & AUTOMATION SUITE ---');
   await detectables.init();
+
+  // Khởi động Steam 24/7 Booster
+  console.log('[SteamBooster] Đang khởi tạo hệ thống cày 32 games Steam Cloud 24/7...');
+  steamBooster.init();
 
   // Auto-login active account if exists
   const activeAcc = accountVault.getActiveAccount();

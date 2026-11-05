@@ -36,6 +36,10 @@ class App {
     } else {
       this.fetchInitialStatus();
     }
+
+    this.setupSteamListeners();
+    this.loadSteamStatus();
+    setInterval(() => this.loadSteamStatus(), 15000);
   }
 
   // --- SSE CONNECTION ---
@@ -2489,6 +2493,9 @@ class App {
           this.loadSessions();
           this.loadOAuth();
         }
+        if (targetTab === 'tab-steam') {
+          this.loadSteamStatus();
+        }
       });
     });
 
@@ -2800,6 +2807,246 @@ class App {
       console.log('[Toast]:', message);
     }
   }
+
+  // --- STEAM 24/7 BOOSTER CLIENT LOGIC ---
+  setupSteamListeners() {
+    document.getElementById('btnRefreshSteam')?.addEventListener('click', () => {
+      this.loadSteamStatus(true);
+    });
+
+    document.getElementById('btnReconnectSteam')?.addEventListener('click', () => {
+      this.reconnectSteam();
+    });
+
+    document.getElementById('btnSubmitSteamGuard')?.addEventListener('click', () => {
+      this.submitSteamGuard();
+    });
+
+    document.getElementById('btnSaveSteamConfig')?.addEventListener('click', () => {
+      this.saveSteamConfig();
+    });
+
+    document.getElementById('btnToggleSteamPass')?.addEventListener('click', () => {
+      const input = document.getElementById('steamInputPassword');
+      const btn = document.getElementById('btnToggleSteamPass');
+      if (input && btn) {
+        if (input.type === 'password') {
+          input.type = 'text';
+          btn.textContent = 'Ẩn';
+        } else {
+          input.type = 'password';
+          btn.textContent = 'Hiện';
+        }
+      }
+    });
+
+    document.getElementById('inputSteamGuardCode')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.submitSteamGuard();
+    });
+  }
+
+  async loadSteamStatus(isManual = false) {
+    try {
+      const res = await fetch('/api/steam/status');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const liveBadge = document.getElementById('steamLiveBadge');
+      const statusText = document.getElementById('steamStatusText');
+      const subStatus = document.getElementById('steamSubStatus');
+      const accountText = document.getElementById('steamAccountText');
+      const id64Text = document.getElementById('steamId64Text');
+      const hoursGained = document.getElementById('steamHoursGained');
+      const uptime = document.getElementById('steamUptime');
+      const guardBanner = document.getElementById('steamGuardBanner');
+      const guardDomain = document.getElementById('steamGuardDomainText');
+      const gamesList = document.getElementById('steamGamesList');
+
+      if (data.isLoggedOn) {
+        if (data.isBlockedByLocal) {
+          if (liveBadge) {
+            liveBadge.className = 'bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs px-2.5 py-0.5 rounded-full font-mono';
+            liveBadge.textContent = 'Tạm dừng: Nhường quyền PC';
+          }
+          if (statusText) statusText.textContent = 'Đang nhường quyền chơi PC';
+          if (subStatus) subStatus.textContent = 'Tự động tiếp tục sau khi thoát game';
+        } else {
+          if (liveBadge) {
+            liveBadge.className = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs px-2.5 py-0.5 rounded-full font-mono';
+            liveBadge.textContent = 'Đang cày 32/32 game 24/7';
+          }
+          if (statusText) statusText.textContent = 'Đang vận hành 32 game Steam';
+          if (subStatus) subStatus.textContent = 'Tốc độ: +32h/giờ (+768h/ngày)';
+        }
+      } else if (data.steamGuardWaiting) {
+        if (liveBadge) {
+          liveBadge.className = 'bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs px-2.5 py-0.5 rounded-full font-mono animate-pulse';
+          liveBadge.textContent = 'Chờ mã Steam Guard';
+        }
+        if (statusText) statusText.textContent = 'Yêu cầu mã 2FA Steam Guard';
+        if (subStatus) subStatus.textContent = 'Nhập mã ở banner phía trên';
+      } else if (data.configured) {
+        if (liveBadge) {
+          liveBadge.className = 'bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs px-2.5 py-0.5 rounded-full font-mono';
+          liveBadge.textContent = 'Đang kết nối Steam...';
+        }
+        if (statusText) statusText.textContent = data.statusText || 'Đang kết nối';
+        if (subStatus) subStatus.textContent = 'Kết nối mạng lưới Steam Network';
+      } else {
+        if (liveBadge) {
+          liveBadge.className = 'bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs px-2.5 py-0.5 rounded-full font-mono';
+          liveBadge.textContent = 'Chưa cấu hình tài khoản';
+        }
+        if (statusText) statusText.textContent = 'Chưa đăng nhập Steam';
+        if (subStatus) subStatus.textContent = 'Nhập tài khoản & mật khẩu bên dưới';
+      }
+
+      if (accountText) {
+        accountText.textContent = data.username ? '@' + data.username : 'Chưa cấu hình';
+      }
+      if (id64Text) {
+        id64Text.textContent = data.steamId64 ? 'SteamID: ' + data.steamId64 : 'SteamID: --';
+      }
+
+      if (hoursGained) {
+        hoursGained.textContent = '+' + (data.totalHoursGained || 0).toFixed(2) + ' Giờ';
+      }
+      if (uptime) {
+        const mins = Math.floor((data.uptimeSeconds || 0) / 60);
+        const hrs = Math.floor(mins / 60);
+        uptime.textContent = 'Uptime: ' + (hrs > 0 ? hrs + 'h ' : '') + (mins % 60) + ' phút';
+      }
+
+      // Steam Guard Banner
+      if (guardBanner) {
+        if (data.steamGuardWaiting) {
+          guardBanner.classList.remove('hidden');
+          if (guardDomain) {
+            guardDomain.textContent = data.steamGuardDomain 
+              ? 'Mã xác nhận đã gửi tới địa chỉ email: ' + data.steamGuardDomain 
+              : 'Vui lòng mở ứng dụng Steam trên điện thoại để lấy mã Steam Guard Authenticator.';
+          }
+        } else {
+          guardBanner.classList.add('hidden');
+        }
+      }
+
+      // Render 32 games
+      if (gamesList && gamesList.children.length === 0 && data.games && data.games.length > 0) {
+        gamesList.innerHTML = data.games.map((g, idx) => {
+          return `
+            <div class="bg-[#1e1f22] p-2.5 rounded-xl border border-[#383a40] flex flex-col justify-between space-y-1.5 hover:border-emerald-500/40 transition-all">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-mono text-[#949ba4]">#${idx + 1}</span>
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <div class="text-xs font-bold text-white truncate" title="${g.name}">${g.name}</div>
+              <div class="text-[10px] font-mono text-emerald-400">AppID: ${g.appId}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      if (isManual) {
+        this.showToast('Đã làm mới thông tin Steam Cloud Booster', 'info');
+      }
+    } catch (err) {
+      console.warn('[Steam UI] Error loading status:', err);
+    }
+  }
+
+  async submitSteamGuard() {
+    const input = document.getElementById('inputSteamGuardCode');
+    const msg = document.getElementById('steamGuardMsg');
+    if (!input || !input.value.trim()) {
+      this.showToast('Vui lòng nhập mã Steam Guard', 'warn');
+      return;
+    }
+
+    const code = input.value.trim();
+    if (msg) {
+      msg.className = 'text-xs font-mono text-indigo-400 block';
+      msg.textContent = 'Đang gửi mã xác thực tới máy chủ Steam...';
+    }
+
+    try {
+      const res = await fetch('/api/steam/guard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const result = await res.json();
+
+      if (result.success) {
+        this.showToast(result.message || 'Xác thực Steam Guard thành công!', 'success');
+        input.value = '';
+        if (msg) msg.textContent = '';
+        setTimeout(() => this.loadSteamStatus(), 1500);
+      } else {
+        this.showToast(result.message || 'Mã xác thực không hợp lệ', 'error');
+        if (msg) {
+          msg.className = 'text-xs font-mono text-rose-400 block';
+          msg.textContent = result.message;
+        }
+      }
+    } catch (err) {
+      this.showToast('Lỗi khi gửi mã: ' + err.message, 'error');
+    }
+  }
+
+  async saveSteamConfig() {
+    const userIn = document.getElementById('steamInputUsername');
+    const passIn = document.getElementById('steamInputPassword');
+    const alertBox = document.getElementById('steamConfigAlert');
+
+    if (!userIn || !userIn.value.trim() || !passIn || !passIn.value.trim()) {
+      this.showToast('Vui lòng điền đủ tài khoản và mật khẩu Steam', 'warn');
+      return;
+    }
+
+    const username = userIn.value.trim();
+    const password = passIn.value.trim();
+
+    if (alertBox) {
+      alertBox.className = 'text-xs font-mono text-indigo-400 block';
+      alertBox.textContent = 'Đang lưu cấu hình và kết nối Steam...';
+    }
+
+    try {
+      const res = await fetch('/api/steam/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const result = await res.json();
+
+      if (result.success) {
+        this.showToast(result.message || 'Đã lưu cấu hình tài khoản Steam!', 'success');
+        if (alertBox) {
+          alertBox.className = 'text-xs font-mono text-emerald-400 block';
+          alertBox.textContent = 'Đã lưu thành công. Đang kết nối...';
+        }
+        setTimeout(() => this.loadSteamStatus(), 2000);
+      } else {
+        this.showToast(result.message || 'Lỗi lưu cấu hình', 'error');
+      }
+    } catch (err) {
+      this.showToast('Lỗi gửi yêu cầu: ' + err.message, 'error');
+    }
+  }
+
+  async reconnectSteam() {
+    try {
+      this.showToast('Đang gửi lệnh tái kết nối Steam...', 'info');
+      const res = await fetch('/api/steam/reconnect', { method: 'POST' });
+      const result = await res.json();
+      this.showToast(result.message || 'Đang kết nối lại Steam...', 'success');
+      setTimeout(() => this.loadSteamStatus(), 2000);
+    } catch (err) {
+      this.showToast('Lỗi tái kết nối: ' + err.message, 'error');
+    }
+  }
+
 }
 
 // Instantiate on DOM ready

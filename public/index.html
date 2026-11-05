@@ -113,6 +113,11 @@
           <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
           <span>6. Quản Lý Tài Khoản</span>
         </button>
+      
+        <button data-tab="tab-steam" class="tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <span>7. Steam Booster 24/7 (32 Game)</span>
+        </button>
       </div>
 
       <!-- ========================================== -->
@@ -1097,6 +1102,129 @@
           </div>
         </div>
       </div>
+      <!-- ========================================== -->
+      <!-- TAB 7: STEAM 24/7 PLAYTIME BOOSTER         -->
+      <!-- ========================================== -->
+      <div id="tab-steam" class="tab-content hidden p-6 space-y-6">
+        <!-- Steam Header Card -->
+        <div class="bg-[#313338] p-5 rounded-xl border border-[#3f4147] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <span class="text-xl">🚀</span>
+              <span>Cày Giờ Steam Cloud 24/7 (32 Game Đồng Thời)</span>
+              <span id="steamLiveBadge" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs px-2.5 py-0.5 rounded-full font-mono">Đang kiểm tra...</span>
+            </h2>
+            <p class="text-xs text-[#949ba4] mt-1">
+              Hệ thống tự động cày cùng lúc 32 trò chơi, tích lũy 768 giờ mỗi ngày. Khi bạn mở game trên máy tính cá nhân, hệ thống sẽ tự động tạm dừng để nhường quyền ưu tiên.
+            </p>
+          </div>
+          <div class="flex items-center space-x-2.5">
+            <button id="btnRefreshSteam" class="bg-[#242629] hover:bg-[#383a40] text-emerald-400 border border-[#3f4147] text-xs px-3.5 py-2 rounded-xl font-mono transition-all flex items-center space-x-1.5 cursor-pointer">
+              <span>↻ Làm Mới Trạng Thái</span>
+            </button>
+            <button id="btnReconnectSteam" class="bg-[#242629] hover:bg-[#383a40] text-amber-400 border border-[#3f4147] text-xs px-3.5 py-2 rounded-xl font-mono transition-all flex items-center space-x-1.5 cursor-pointer">
+              <span>⚡ Tái Kết Nối</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Steam Guard Notification Banner (Hiển thị khi cần mã xác thực) -->
+        <div id="steamGuardBanner" class="hidden bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 space-y-3">
+          <div class="flex items-center space-x-3">
+            <span class="text-2xl animate-bounce">🔑</span>
+            <div>
+              <h3 class="text-sm font-bold text-amber-300">Yêu Cầu Mã Xác Thực Steam Guard</h3>
+              <p id="steamGuardDomainText" class="text-xs text-[#949ba4]">Vui lòng kiểm tra email hoặc ứng dụng Steam Mobile Authenticator để lấy mã xác thực 5 ký tự.</p>
+            </div>
+          </div>
+          <div class="flex flex-col sm:flex-row items-center gap-3 pt-1">
+            <input type="text" id="inputSteamGuardCode" placeholder="Nhập mã (Ví dụ: K9X72)" maxlength="10" class="w-full sm:w-64 bg-[#1e1f22] border border-amber-500/40 rounded-xl px-4 py-2.5 text-xs text-white uppercase font-mono tracking-widest text-center focus:outline-none focus:border-amber-400">
+            <button id="btnSubmitSteamGuard" class="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black px-6 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all">
+              Xác Nhận Mã Steam Guard
+            </button>
+          </div>
+          <div id="steamGuardMsg" class="hidden text-xs font-mono"></div>
+        </div>
+
+        <!-- Metric Stat Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Card 1: Trạng thái -->
+          <div class="bg-[#242629] p-4 rounded-xl border border-[#3f4147] space-y-1">
+            <div class="text-[#949ba4] text-xs font-medium uppercase tracking-wider">Trạng Thái Kết Nối</div>
+            <div id="steamStatusText" class="text-sm font-bold text-white truncate">Đang tải...</div>
+            <div id="steamSubStatus" class="text-xs text-[#949ba4] font-mono">Đang kiểm tra daemon</div>
+          </div>
+
+          <!-- Card 2: Tài khoản -->
+          <div class="bg-[#242629] p-4 rounded-xl border border-[#3f4147] space-y-1">
+            <div class="text-[#949ba4] text-xs font-medium uppercase tracking-wider">Tài Khoản Steam</div>
+            <div id="steamAccountText" class="text-sm font-bold text-indigo-400 truncate">Chưa cấu hình</div>
+            <div id="steamId64Text" class="text-xs text-[#949ba4] font-mono truncate">SteamID: --</div>
+          </div>
+
+          <!-- Card 3: Tốc độ cày -->
+          <div class="bg-[#242629] p-4 rounded-xl border border-[#3f4147] space-y-1">
+            <div class="text-[#949ba4] text-xs font-medium uppercase tracking-wider">Tốc Độ Tích Lũy</div>
+            <div class="text-sm font-bold text-emerald-400">+32.0 Giờ / 1h thực</div>
+            <div class="text-xs text-[#949ba4] font-mono">+768 Giờ / Mỗi ngày</div>
+          </div>
+
+          <!-- Card 4: Tổng giờ thu được -->
+          <div class="bg-[#242629] p-4 rounded-xl border border-[#3f4147] space-y-1">
+            <div class="text-[#949ba4] text-xs font-medium uppercase tracking-wider">Tổng Giờ Phiên Này</div>
+            <div id="steamHoursGained" class="text-sm font-bold text-amber-400 font-mono">0.00 Giờ</div>
+            <div id="steamUptime" class="text-xs text-[#949ba4] font-mono">Thời gian chạy: 0 phút</div>
+          </div>
+        </div>
+
+        <!-- Cấu hình tài khoản Steam qua Web UI -->
+        <div class="bg-[#242629] p-5 rounded-xl border border-[#3f4147] space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+              <span>Cấu Hình Tài Khoản Steam (Tùy Chọn Trực Tiếp)</span>
+            </h3>
+            <span class="text-xs text-[#949ba4]">Có thể dùng biến môi trường STEAM_USERNAME / STEAM_PASSWORD trên Render hoặc cấu hình tại đây</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-[#949ba4] mb-1">Tài khoản Steam (Username / Account Name):</label>
+              <input type="text" id="steamInputUsername" placeholder="Nhập tên đăng nhập Steam..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#5865f2]">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-[#949ba4] mb-1">Mật khẩu Steam (Password):</label>
+              <div class="relative">
+                <input type="password" id="steamInputPassword" placeholder="Nhập mật khẩu Steam..." class="w-full bg-[#1e1f22] border border-[#3f4147] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#5865f2]">
+                <button type="button" id="btnToggleSteamPass" class="absolute right-3 top-2.5 text-[#949ba4] hover:text-white text-xs px-2 py-0.5 rounded">Hiện</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <div id="steamConfigAlert" class="text-xs font-mono hidden"></div>
+            <button id="btnSaveSteamConfig" class="ml-auto bg-[#5865f2] hover:bg-[#4752c4] text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center space-x-2">
+              <span>Lưu & Đăng Nhập Steam Cloud</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Danh sách 32 trò chơi tối ưu -->
+        <div class="bg-[#242629] p-5 rounded-xl border border-[#3f4147] space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span>Ma Trận 32 Trò Chơi Steam Đang Vận Hành Đồng Thời</span>
+            </h3>
+            <span class="text-xs text-emerald-400 font-mono">32/32 Games Idling</span>
+          </div>
+
+          <div id="steamGamesList" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <!-- Game cards rendered via JS -->
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- LIVE REVERSE-ENGINEERING CONSOLE / TERMINAL (BOTTOM) -->
