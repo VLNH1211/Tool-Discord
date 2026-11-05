@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'data', 'steam_config.json');
+const VAULT_PATH = path.join(__dirname, '..', 'data', 'steam_vault.json');
 
 // 32 trò chơi sở hữu trong tài khoản Steam của bạn có giờ chơi 0h (chưa từng mở)
 const GAMES_LIST = [
@@ -48,6 +49,7 @@ class SteamBoosterService {
   constructor() {
     this.client = null;
     this.isLoggedOn = false;
+    this.isRunning = true; // Trạng thái BẬT / TẮT cày game của Bot
     this.isBlockedByLocal = false;
     this.statusText = 'Chưa khởi động';
     this.steamId64 = '';
@@ -62,9 +64,10 @@ class SteamBoosterService {
       password: '',
       refreshToken: ''
     };
+    this.vaultAccounts = [];
     this.activeQrSession = null;
     this.qrStatus = {
-      state: 'idle', // 'idle' | 'generating' | 'waiting_for_scan' | 'scanned' | 'authenticated' | 'expired' | 'error'
+      state: 'idle',
       message: 'Sẵn sàng tạo mã QR đăng nhập.',
       qrDataUrl: '',
       qrUrl: '',
@@ -72,11 +75,153 @@ class SteamBoosterService {
     };
   }
 
+  // --- STEAM ACCOUNT VAULT PERSISTENCE ---
+  loadVault() {
+    try {
+      if (fs.existsSync(VAULT_PATH)) {
+        const raw = fs.readFileSync(VAULT_PATH, 'utf-8');
+        this.vaultAccounts = JSON.parse(raw);
+        if (!Array.isArray(this.vaultAccounts)) this.vaultAccounts = [];
+      } else {
+        this.vaultAccounts = [];
+      }
+    } catch (e) {
+      console.warn('[SteamBooster Vault] Lỗi đọc steam_vault.json:', e.message);
+      this.vaultAccounts = [];
+    }
+  }
+
+  saveVault() {
+    try {
+      fs.mkdirSync(path.dirname(VAULT_PATH), { recursive: true });
+      fs.writeFileSync(VAULT_PATH, JSON.stringify(this.vaultAccounts, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[SteamBooster Vault] Lỗi lưu steam_vault.json:', e.message);
+    }
+  }
+
+  addOrUpdateSavedAccount(accountData) {
+    this.loadVault();
+    const id = accountData.steamId64 || accountData.username;
+    if (!id) return;
+
+    const existingIdx = this.vaultAccounts.findIndex(a => a.id === id || a.username === accountData.username);
+    const now = Date.now();
+
+    // Mark other accounts as inactive
+    this.vaultAccounts.forEach(a => a.isActive = false);
+
+    const record = {
+      id,
+      username: accountData.username || (existingIdx >= 0 ? this.vaultAccounts[existingIdx].username : 'Unknown'),
+      steamId64: accountData.steamId64 || (existingIdx >= 0 ? this.vaultAccounts[existingIdx].steamId64 : ''),
+      password: accountData.password || (existingIdx >= 0 ? this.vaultAccounts[existingIdx].password : ''),
+      refreshToken: accountData.refreshToken || (existingIdx >= 0 ? this.vaultAccounts[existingIdx].refreshToken : ''),
+      label: accountData.label || `@${accountData.username}`,
+      addedAt: existingIdx >= 0 ? this.vaultAccounts[existingIdx].addedAt : now,
+      lastUsed: now,
+      isActive: true
+    };
+
+    if (existingIdx >= 0) {
+      this.vaultAccounts[existingIdx] = record;
+    } else {
+      this.vaultAccounts.unshift(record);
+    }
+
+    this.saveVault();
+    console.log(`[SteamBooster Vault] Đã lưu tài khoản Steam: @${record.username} (${record.steamId64})`);
+  }
+
+  getSavedAccounts() {
+    this.loadVault();
+    return this.vaultAccounts.map(a => ({
+      id: a.id,
+      username: a.username,
+      steamId64: a.steamId64,
+      label: a.label || `@${a.username}`,
+      hasPassword: Boolean(a.password),
+      hasRefreshToken: Boolean(a.refreshToken),
+      isActive: a.isActive || (this.steamId64 && a.steamId64 === this.steamId64) || (this.credentials.username && a.username === this.credentials.username),
+      addedAt: a.addedAt,
+      lastUsed: a.lastUsed
+    }));
+  }
+
+  switchAccount(id) {
+    this.loadVault();
+    const acc = this.vaultAccounts.find(a => a.id === id || a.steamId64 === id || a.username === id);
+    if (!acc) {
+      return { success: false, message: 'Không tìm thấy tài khoản trong Vault.' };
+    }
+
+    this.vaultAccounts.forEach(a => a.isActive = (a.id === acc.id));
+    this.saveVault();
+
+    this.credentials.username = acc.username || '';
+    this.credentials.password = acc.password || '';
+    this.credentials.refreshToken = acc.refreshToken || '';
+
+    this.saveConfig(this.credentials.username, this.credentials.password, this.credentials.refreshToken);
+
+    try {
+      if (this.client) this.client.logOff();
+    } catch (e) {}
+
+    setTimeout(() => {
+      this.attemptLogin();
+    }, 1200);
+
+    return { success: true, message: `Đang chuyển sang tài khoản @${acc.username}...` };
+  }
+
+  deleteSavedAccount(id) {
+    this.loadVault();
+    this.vaultAccounts = this.vaultAccounts.filter(a => a.id !== id && a.steamId64 !== id && a.username !== id);
+    this.saveVault();
+    return { success: true, message: 'Đã xóa tài khoản khỏi Vault.' };
+  }
+
+  // --- BOT RUNTIME CONTROLS (BẬT / TẮT) ---
+  startBot() {
+    this.isRunning = true;
+    if (this.isLoggedOn && this.client) {
+      this.client.setPersona(SteamUser.EPersonaState.Online);
+      this.client.gamesPlayed(APP_IDS);
+      this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game 0h`;
+      console.log(`[SteamBooster] Đã BẬT cày 32 game Steam.`);
+      return { success: true, message: 'Đã BẬT bot! Đang cày 32 game 0h liên tục.', isRunning: true };
+    } else {
+      this.attemptLogin();
+      return { success: true, message: 'Đang kết nối lại và kích hoạt cày 32 game.', isRunning: true };
+    }
+  }
+
+  stopBot() {
+    this.isRunning = false;
+    if (this.isLoggedOn && this.client) {
+      this.client.gamesPlayed([]); // Dừng cày toàn bộ trò chơi
+      this.statusText = 'Đã tạm dừng: Bot đang TẮT (Không cày game)';
+      console.log(`[SteamBooster] Đã TẮT cày game (Tạm dừng hoạt động).`);
+    } else {
+      this.statusText = 'Bot đang TẮT (Không hoạt động)';
+    }
+    return { success: true, message: 'Đã TẮT bot! Toàn bộ 32 game đã tạm dừng cày.', isRunning: false };
+  }
+
+  toggleBot() {
+    return this.isRunning ? this.stopBot() : this.startBot();
+  }
+
+  // --- CONFIG LOADER & INITIALIZATION ---
   loadConfig() {
+    this.loadVault();
+
     let username = process.env.STEAM_USERNAME || '';
     let password = process.env.STEAM_PASSWORD || '';
     let refreshToken = process.env.STEAM_REFRESH_TOKEN || '';
 
+    // 1. Đọc từ tệp cấu hình cục bộ
     if (!refreshToken && (!username || !password)) {
       try {
         if (fs.existsSync(CONFIG_PATH)) {
@@ -88,6 +233,17 @@ class SteamBoosterService {
         }
       } catch (err) {
         console.warn('[SteamBooster] Không thể đọc steam_config.json:', err.message);
+      }
+    }
+
+    // 2. Nếu vẫn trống, thử nạp tài khoản active gần nhất từ steam_vault.json
+    if (!refreshToken && (!username || !password) && this.vaultAccounts.length > 0) {
+      const active = this.vaultAccounts.find(a => a.isActive) || this.vaultAccounts[0];
+      if (active) {
+        username = active.username || '';
+        password = active.password || '';
+        refreshToken = active.refreshToken || '';
+        console.log(`[SteamBooster] Tự động nạp tài khoản lưu trong Vault: @${username}`);
       }
     }
 
@@ -139,12 +295,27 @@ class SteamBoosterService {
       this.lastCodeWrong = false;
       this.loginTime = Date.now();
       this.steamId64 = this.client.steamID ? this.client.steamID.getSteamID64() : '';
-      this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game 0h`;
 
-      console.log(`[SteamBooster] Đăng nhập thành công! SteamID64: ${this.steamId64}`);
-      this.client.setPersona(SteamUser.EPersonaState.Online);
-      this.client.gamesPlayed(APP_IDS);
-      console.log(`[SteamBooster] Đã kích hoạt 32 game 0h. Tốc độ: +32h mỗi 1 giờ thực (+768h/ngày).`);
+      // Tự động lưu tài khoản vào Vault
+      this.addOrUpdateSavedAccount({
+        id: this.steamId64 || this.credentials.username,
+        username: this.credentials.username,
+        steamId64: this.steamId64,
+        password: this.credentials.password,
+        refreshToken: this.credentials.refreshToken
+      });
+
+      if (this.isRunning) {
+        this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game 0h`;
+        console.log(`[SteamBooster] Đăng nhập thành công! SteamID64: ${this.steamId64}`);
+        this.client.setPersona(SteamUser.EPersonaState.Online);
+        this.client.gamesPlayed(APP_IDS);
+        console.log(`[SteamBooster] Đã kích hoạt 32 game 0h. Tốc độ: +32h mỗi 1 giờ thực (+768h/ngày).`);
+      } else {
+        this.statusText = 'Đã kết nối Steam (Bot đang TẮT)';
+        this.client.gamesPlayed([]);
+        console.log(`[SteamBooster] Đăng nhập thành công nhưng Bot đang ở chế độ TẮT.`);
+      }
     });
 
     this.client.on('steamGuard', (domain, callback, lastCodeWrong) => {
@@ -165,9 +336,13 @@ class SteamBoosterService {
       } else {
         if (this.isBlockedByLocal) {
           this.isBlockedByLocal = false;
-          this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game 0h`;
-          console.log(`[SteamBooster] Phiên chơi PC kết thúc. Tự động tiếp tục cày 32 game.`);
-          this.client.gamesPlayed(APP_IDS);
+          if (this.isRunning) {
+            this.statusText = `Đang cày đồng thời ${GAMES_LIST.length} game 0h`;
+            console.log(`[SteamBooster] Phiên chơi PC kết thúc. Tự động tiếp tục cày 32 game.`);
+            this.client.gamesPlayed(APP_IDS);
+          } else {
+            this.statusText = 'Bot đang TẮT';
+          }
         }
       }
     });
@@ -275,6 +450,14 @@ class SteamBoosterService {
         this.credentials.refreshToken = session.refreshToken;
         this.credentials.username = session.accountName || this.credentials.username || `SteamID_${steamId}`;
         this.saveConfig(this.credentials.username, this.credentials.password, session.refreshToken);
+
+        // Lưu vào Vault
+        this.addOrUpdateSavedAccount({
+          id: steamId || this.credentials.username,
+          username: this.credentials.username,
+          steamId64: steamId,
+          refreshToken: session.refreshToken
+        });
 
         try {
           if (this.client) this.client.logOff();
@@ -388,6 +571,7 @@ class SteamBoosterService {
     return {
       configured: Boolean(this.credentials.refreshToken || (this.credentials.username && this.credentials.password)),
       hasRefreshToken: Boolean(this.credentials.refreshToken),
+      isRunning: this.isRunning,
       username: maskedUsername,
       rawUsername: this.credentials.username,
       isLoggedOn: this.isLoggedOn,
@@ -401,11 +585,12 @@ class SteamBoosterService {
       uptimeSeconds,
       uptimeHours: Number(uptimeHours.toFixed(2)),
       totalHoursGained: Number(totalHoursGained.toFixed(2)),
-      ratePerHour: GAMES_LIST.length,
-      ratePerDay: GAMES_LIST.length * 24,
+      ratePerHour: this.isRunning ? GAMES_LIST.length : 0,
+      ratePerDay: this.isRunning ? (GAMES_LIST.length * 24) : 0,
       gamesCount: GAMES_LIST.length,
       games: GAMES_LIST,
-      qrStatus: this.qrStatus
+      qrStatus: this.qrStatus,
+      savedAccounts: this.getSavedAccounts()
     };
   }
 }

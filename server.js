@@ -740,6 +740,32 @@ app.post('/api/steam/qr/cancel', (req, res) => {
   res.json(steamBooster.cancelQrLogin());
 });
 
+// --- STEAM BOT RUNTIME CONTROLS (BẬT / TẮT) ---
+app.post('/api/steam/start', (req, res) => {
+  res.json(steamBooster.startBot());
+});
+
+app.post('/api/steam/stop', (req, res) => {
+  res.json(steamBooster.stopBot());
+});
+
+app.post('/api/steam/toggle', (req, res) => {
+  res.json(steamBooster.toggleBot());
+});
+
+// --- STEAM ACCOUNTS VAULT PERSISTENCE ---
+app.get('/api/steam/accounts', (req, res) => {
+  res.json(steamBooster.getSavedAccounts());
+});
+
+app.post('/api/steam/accounts/switch', (req, res) => {
+  res.json(steamBooster.switchAccount(req.body.id));
+});
+
+app.post('/api/steam/accounts/delete', (req, res) => {
+  res.json(steamBooster.deleteSavedAccount(req.body.id));
+});
+
 // --- CLOUD HEALTH CHECK & UPTIME MONITORING ---
 app.get('/health', (req, res) => {
   res.json({

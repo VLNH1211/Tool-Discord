@@ -5,6 +5,7 @@ package-lock.json
 # Sensitive Account Data & Vault Tokens (CRITICAL FOR PUBLIC REPOS)
 data/accounts.json
 data/steam_config.json
+data/steam_vault.json
 
 # Cache and generated media files
 data/detectables_cache.json

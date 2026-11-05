@@ -2962,6 +2962,30 @@ class App {
         }).join('');
       }
 
+
+      // Update Bot ON / OFF Toggle Button
+      const toggleBtn = document.getElementById('btnToggleSteamBot');
+      const toggleIcon = document.getElementById('steamToggleIcon');
+      const toggleText = document.getElementById('steamToggleText');
+
+      if (toggleBtn && toggleIcon && toggleText) {
+        if (data.isRunning) {
+          toggleBtn.className = 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs px-4 py-2 rounded-xl font-bold font-mono transition-all flex items-center space-x-1.5 cursor-pointer shadow-md';
+          toggleIcon.textContent = '⏹';
+          toggleText.textContent = 'Tắt Bot (Dừng Cày)';
+        } else {
+          toggleBtn.className = 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs px-4 py-2 rounded-xl font-bold font-mono transition-all flex items-center space-x-1.5 cursor-pointer shadow-md';
+          toggleIcon.textContent = '▶';
+          toggleText.textContent = 'Bật Bot (Cày 32 Game)';
+        }
+      }
+
+      // Render Saved Accounts Vault
+      if (data.savedAccounts) {
+        this.renderSteamVault(data.savedAccounts);
+      }
+
+
       if (isManual) {
         this.showToast('Đã làm mới thông tin Steam Cloud Booster', 'info');
       }
@@ -3050,6 +3074,106 @@ class App {
     }
   }
 
+
+
+  // --- STEAM BOT RUNTIME CONTROLS (BẬT / TẮT) ---
+  async toggleSteamBot() {
+    try {
+      const res = await fetch('/api/steam/toggle', { method: 'POST' });
+      const result = await res.json();
+      if (result.success) {
+        this.showToast(result.message || 'Đã thay đổi trạng thái bot Steam!', result.isRunning ? 'success' : 'warn');
+        this.loadSteamStatus(true);
+      } else {
+        this.showToast(result.message || 'Không thể thay đổi trạng thái bot', 'error');
+      }
+    } catch (e) {
+      this.showToast('Lỗi khi chuyển đổi bot: ' + e.message, 'error');
+    }
+  }
+
+  // --- STEAM ACCOUNTS VAULT CLIENT LOGIC ---
+  renderSteamVault(accounts = []) {
+    const container = document.getElementById('steamVaultAccountsList');
+    const badge = document.getElementById('steamVaultCountBadge');
+    if (!container) return;
+
+    if (badge) badge.textContent = accounts.length + ' tài khoản trong Vault';
+
+    if (!accounts || accounts.length === 0) {
+      container.innerHTML = '<div class="col-span-full text-center py-6 text-xs text-[#949ba4]">Chưa có tài khoản nào được lưu. Đăng nhập để tự động lưu vào Vault.</div>';
+      return;
+    }
+
+    container.innerHTML = accounts.map(a => {
+      const isActive = Boolean(a.isActive);
+      return `
+        <div class="bg-[#1e1f22] p-4 rounded-xl border ${isActive ? 'border-emerald-500/50 bg-emerald-500/[0.03]' : 'border-[#3f4147]'} flex flex-col justify-between space-y-3 shadow-md">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs uppercase shadow">
+                ${a.username ? a.username.charAt(0) : 'S'}
+              </div>
+              <div class="leading-tight">
+                <div class="text-xs font-bold text-white flex items-center space-x-1.5">
+                  <span>@${a.username}</span>
+                  ${isActive ? '<span class="bg-emerald-500/20 text-emerald-300 text-[9px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/30">Đang Cày</span>' : ''}
+                </div>
+                <div class="text-[10px] text-[#949ba4] font-mono">${a.steamId64 ? 'SteamID: ' + a.steamId64 : 'Đã lưu mật khẩu'}</div>
+              </div>
+            </div>
+            ${isActive ? '<span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>' : ''}
+          </div>
+
+          <div class="flex items-center justify-between pt-1 border-t border-white/[0.05]">
+            ${isActive ? 
+              '<span class="text-[10px] text-emerald-400 font-mono">Phiên đang hoạt động</span>' : 
+              `<button onclick="window.switchSteamAccount('${a.id}')" class="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 text-[11px] px-3 py-1 rounded-lg border border-indigo-500/40 font-mono transition-all cursor-pointer">⚡ Chuyển Sang</button>`
+            }
+            <button onclick="window.deleteSteamAccount('${a.id}')" class="text-[10px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded font-mono hover:bg-rose-500/10 transition-all cursor-pointer" title="Xóa khỏi danh sách">Xóa</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async switchSteamAccount(id) {
+    try {
+      this.showToast('Đang chuyển sang tài khoản...', 'info');
+      const res = await fetch('/api/steam/accounts/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const result = await res.json();
+      if (result.success) {
+        this.showToast(result.message || 'Đã chuyển tài khoản!', 'success');
+        setTimeout(() => this.loadSteamStatus(true), 2000);
+      } else {
+        this.showToast(result.message || 'Lỗi chuyển tài khoản', 'error');
+      }
+    } catch (e) {
+      this.showToast('Lỗi: ' + e.message, 'error');
+    }
+  }
+
+  async deleteSteamAccount(id) {
+    if (!confirm('Bạn có chắc chắn muốn xóa tài khoản này khỏi danh sách đã lưu?')) return;
+    try {
+      const res = await fetch('/api/steam/accounts/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const result = await res.json();
+      if (result.success) {
+        this.showToast('Đã xóa tài khoản khỏi Vault!', 'success');
+        this.loadSteamStatus(true);
+      }
+    } catch (e) {
+      this.showToast('Lỗi xóa: ' + e.message, 'error');
+    }
+  }
 
   async startSteamQr() {
     const btn = document.getElementById('btnStartSteamQr');
@@ -3192,3 +3316,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.discordApp = new App();
   window.app = window.discordApp;
 });
+
+
+window.toggleSteamBot = () => (window.discordApp || window.app)?.toggleSteamBot();
+window.switchSteamAccount = (id) => (window.discordApp || window.app)?.switchSteamAccount(id);
+window.deleteSteamAccount = (id) => (window.discordApp || window.app)?.deleteSteamAccount(id);

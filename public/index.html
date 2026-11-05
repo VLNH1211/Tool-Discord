@@ -47,7 +47,7 @@
         <div>
           <div class="flex items-center space-x-2">
             <h1 class="text-white font-black text-lg tracking-wide">Discord Mission Control</h1>
-            <span class="bg-[#5865f2]/20 text-[#5865f2] border border-[#5865f2]/40 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">Suite v3.9.6 Pro</span>
+            <span class="bg-[#5865f2]/20 text-[#5865f2] border border-[#5865f2]/40 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">Suite v3.9.7 Pro</span>
           </div>
           <p class="text-xs text-[#949ba4]">Hệ thống điều khiển & tự động hóa tài khoản Discord chuyên sâu</p>
         </div>
@@ -1125,6 +1125,10 @@
             <button id="btnReconnectSteam" class="bg-[#242629] hover:bg-[#383a40] text-amber-400 border border-[#3f4147] text-xs px-3.5 py-2 rounded-xl font-mono transition-all flex items-center space-x-1.5 cursor-pointer">
               <span>⚡ Tái Kết Nối</span>
             </button>
+            <button id="btnToggleSteamBot" onclick="window.toggleSteamBot();" class="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs px-4 py-2 rounded-xl font-bold font-mono transition-all flex items-center space-x-1.5 cursor-pointer shadow-md">
+              <span id="steamToggleIcon">⏹</span>
+              <span id="steamToggleText">Tắt Bot (Dừng Cày)</span>
+            </button>
           </div>
         </div>
 
@@ -1282,6 +1286,23 @@
         </div>
 
 
+        
+        <!-- STEAM ACCOUNTS VAULT HUB (LƯU LẠI TÀI KHOẢN STEAM) -->
+        <div class="bg-[#242629] p-5 rounded-xl border border-[#3f4147] space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <span class="text-lg">🗄️</span>
+              <span>Tài Khoản Steam Đã Lưu (Steam Vault)</span>
+            </h3>
+            <span id="steamVaultCountBadge" class="text-xs text-indigo-400 font-mono">0 tài khoản trong Vault</span>
+          </div>
+
+          <div id="steamVaultAccountsList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="col-span-full text-center py-6 text-xs text-[#949ba4]">Chưa có tài khoản nào được lưu. Đăng nhập để tự động lưu vào Vault.</div>
+          </div>
+        </div>
+
+
         <!-- Cấu hình tài khoản Steam qua Web UI -->
         <div class="bg-[#242629] p-5 rounded-xl border border-[#3f4147] space-y-4">
           <div class="flex items-center justify-between">
@@ -1402,6 +1423,6 @@
   </div>
 
   <!-- Custom Scripts -->
-  <script src="/js/app.js?v=3.9.6"></script>
+  <script src="/js/app.js?v=3.9.7"></script>
 </body>
 </html>
