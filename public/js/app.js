@@ -2941,12 +2941,13 @@ class App {
 
       // Render 32 games
       if (gamesList && data.games && data.games.length > 0) {
+        const gameHours = (data.uptimeHours || 0).toFixed(2);
         gamesList.innerHTML = data.games.map((g, idx) => {
           return `
-            <div class="bg-[#1e1f22] p-2.5 rounded-xl border border-[#3f4147] flex flex-col justify-between space-y-1.5 hover:border-amber-500/40 transition-all">
+            <div class="bg-[#1e1f22] p-2.5 rounded-xl border border-[#3f4147] flex flex-col justify-between space-y-1.5 hover:border-emerald-500/40 transition-all">
               <div class="flex items-center justify-between">
                 <span class="text-[10px] font-mono text-[#949ba4]">#${idx + 1}</span>
-                <span class="bg-amber-500/20 text-amber-300 text-[9px] font-mono px-1.5 py-0.5 rounded border border-amber-500/30 font-bold">0.0h Gốc</span>
+                <span class="bg-emerald-500/20 text-emerald-300 text-[9px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/30 font-bold">+${gameHours}h</span>
               </div>
               <div class="text-xs font-bold text-white truncate" title="${g.name}">${g.name}</div>
               <div class="flex items-center justify-between text-[10px] font-mono">
