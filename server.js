@@ -718,7 +718,7 @@ app.get('/ping', (req, res) => {
 
 // Start initialization & server
 async function start() {
-  console.log('--- KHỞI ĐỘNG DISCORD ACCOUNT MANAGER & AUTOMATION SUITE ---');
+  console.log('--- KHỞI ĐỘNG DISCORD ACCOUNT MANAGER & AUTOMATION SUITE v4.0.0 PRO ---');
   await detectables.init();
 
   // Khởi động Steam 24/7 Booster
@@ -742,7 +742,7 @@ async function start() {
 
   app.listen(PORT, () => {
     console.log(`\n================================================================`);
-    console.log(`[DISCORD SUITE] Mission Control Dashboard: http://localhost:${PORT}`);
+    console.log(`[DISCORD SUITE v4.0.0 PRO] Mission Control Dashboard: http://localhost:${PORT}`);
     console.log(`================================================================\n`);
   });
 }
