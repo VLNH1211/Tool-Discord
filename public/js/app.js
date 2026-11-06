@@ -2582,14 +2582,14 @@ class App {
       });
     }
 
-    // Top Tabs Navigation
+    // Sidebar Tabs Navigation (Mục 1 -> 7 bên trái)
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const targetTab = btn.dataset.tab;
         document.querySelectorAll('.tab-btn').forEach(b => {
-          b.className = 'tab-btn px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white hover:bg-[#2e3035] whitespace-nowrap';
+          b.className = 'tab-btn w-full px-3.5 py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-between text-[#949ba4] hover:text-white hover:bg-[#2e3035]/70 border border-transparent text-left cursor-pointer group';
         });
-        btn.className = 'tab-btn active px-4 py-2.5 font-bold text-xs sm:text-sm rounded-t-lg transition-all flex items-center space-x-2 text-white bg-[#2b2d31] border-t-2 border-[#5865f2] whitespace-nowrap';
+        btn.className = 'tab-btn active w-full px-3.5 py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-between text-white bg-gradient-to-r from-[#5865f2]/25 to-[#5865f2]/10 border border-[#5865f2]/50 shadow-md text-left cursor-pointer group';
 
         document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
         document.getElementById(targetTab)?.classList.remove('hidden');
