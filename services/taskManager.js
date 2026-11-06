@@ -28,6 +28,7 @@ class TaskManager {
 
     this.accumulatedPlaytimeSeconds = 0;
     this.targetPlaytimeHours = 5000;
+    this.injectedDayOffset = 1;
     this._loadPlaytimeStats();
 
     this.diversityTask = {
@@ -381,6 +382,7 @@ class TaskManager {
         const userStats = data.accounts?.[currentId] || data;
         this.accumulatedPlaytimeSeconds = userStats.accumulatedSeconds || 0;
         this.targetPlaytimeHours = userStats.targetHours || 5000;
+        this.injectedDayOffset = userStats.injectedDayOffset || Math.max(1, Math.ceil(this.accumulatedPlaytimeSeconds / (3600 * 20)) + 1);
       }
     } catch (e) {
       this.accumulatedPlaytimeSeconds = 0;
@@ -408,6 +410,7 @@ class TaskManager {
         username: currentUsername,
         accumulatedSeconds: currentTotalSeconds,
         targetHours: this.targetPlaytimeHours,
+        injectedDayOffset: this.injectedDayOffset || 1,
         lastUpdated: new Date().toISOString()
       };
       data.accumulatedSeconds = currentTotalSeconds;
@@ -653,7 +656,11 @@ class TaskManager {
     if (games.length === 0) return;
 
     const hours = Math.max(1, parseInt(hoursToInject) || 10);
-    const dayOffset = (this.playtimeTask.autoInjectCount || 0) + 1;
+    if (!this.injectedDayOffset || this.injectedDayOffset < 1) {
+      const alreadyHours = Math.floor(this.accumulatedPlaytimeSeconds / 3600);
+      this.injectedDayOffset = Math.max(1, Math.ceil(alreadyHours / 20) + 1);
+    }
+    const dayOffset = this.injectedDayOffset;
 
     if (isMulti) {
       this.addLog(`⚡ [TỰ ĐỘNG BƠM GIỜ ĐA GAME] Đã cày tròn ${currentHour} tiếng AFK liên tục! Đang tự động nạp ngầm +${hours} giờ chơi cho ${games.length} games vào ${dayOffset} ngày trước (Chuẩn PE Fingerprint, x${games.length} hiệu quả)...`, 'WARN');
@@ -685,6 +692,8 @@ class TaskManager {
           this.accumulatedPlaytimeSeconds += (hours * 3600);
           this.playtimeTask.autoInjectCount = (this.playtimeTask.autoInjectCount || 0) + 1;
           this.playtimeTask.autoInjectTotalHours = (this.playtimeTask.autoInjectTotalHours || 0) + hours;
+          // Advance injectedDayOffset so subsequent auto hourly injections never overwrite past days
+          this.injectedDayOffset = (this.injectedDayOffset || 1) + 2;
           this._savePlaytimeStats();
 
           const currentTotal = ((this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds) / 3600).toFixed(2);
@@ -708,6 +717,9 @@ class TaskManager {
           this.accumulatedPlaytimeSeconds += (hours * 3600);
           this.playtimeTask.autoInjectCount = (this.playtimeTask.autoInjectCount || 0) + 1;
           this.playtimeTask.autoInjectTotalHours = (this.playtimeTask.autoInjectTotalHours || 0) + hours;
+          // Advance injectedDayOffset so subsequent auto hourly injections never overwrite past days
+          const daysAdded = Math.max(1, Math.ceil(hours / 10));
+          this.injectedDayOffset = (this.injectedDayOffset || 1) + daysAdded;
           this._savePlaytimeStats();
 
           const currentTotal = ((this.accumulatedPlaytimeSeconds + this.playtimeTask.elapsedSeconds) / 3600).toFixed(2);
@@ -734,7 +746,8 @@ class TaskManager {
       }
 
       const multiplier = this.playtimeTask.speedMultiplier || 1;
-      const durationMs = this.playtimeTask.intervalSec * 1000 * multiplier;
+      const sessionSec = Math.max(this.playtimeTask.intervalSec, this.playtimeTask.sessionElapsedSeconds || this.playtimeTask.intervalSec);
+      const durationMs = sessionSec * 1000 * multiplier;
       const events = discordClient.createPlaytimeHeartbeatEvent(
         this.playtimeTask.game,
         this.playtimeTask.sessionId,
@@ -785,7 +798,8 @@ class TaskManager {
       }
 
       const multiplier = this.playtimeTask.speedMultiplier || 1;
-      const durationMs = this.playtimeTask.intervalSec * 1000 * multiplier;
+      const sessionSec = Math.max(this.playtimeTask.intervalSec, this.playtimeTask.sessionElapsedSeconds || this.playtimeTask.intervalSec);
+      const durationMs = sessionSec * 1000 * multiplier;
       const allEvents = [];
 
       for (const game of this.playtimeTask.games) {
@@ -857,10 +871,17 @@ class TaskManager {
 
     const hoursPerGame = Math.max(1, Math.floor(hours / games.length));
     const allEvents = [];
+    const daysPerGame = Math.max(1, Math.ceil(hoursPerGame / 20));
+
+    if (!this.injectedDayOffset || this.injectedDayOffset < 1) {
+      const alreadyHours = Math.floor(this.accumulatedPlaytimeSeconds / 3600);
+      this.injectedDayOffset = Math.max(1, Math.ceil(alreadyHours / 20) + 1);
+    }
+    const baseOffset = this.injectedDayOffset;
 
     for (let idx = 0; idx < games.length; idx++) {
       const g = games[idx];
-      const dayOffset = 1 + (idx * 2);
+      const dayOffset = baseOffset;
       const evts = discordClient.buildSlicedHistoryEvents(g, this.user.profile?.id, hoursPerGame, { maxHoursPerDay: 20, startDayOffset: dayOffset });
       allEvents.push(...evts);
     }
@@ -924,6 +945,9 @@ class TaskManager {
     this.turboPlaytime.currentHours = totalSuccessHours;
     this.turboPlaytime.percent = 100;
     this.turboPlaytime.message = `Hoàn tất bơm +${totalSuccessHours.toLocaleString()} giờ trên ${targetLabel} lên Discord!`;
+
+    // Advance injectedDayOffset by the number of days injected so future injections NEVER collide!
+    this.injectedDayOffset = (this.injectedDayOffset || 1) + daysPerGame + 1;
 
     this._savePlaytimeStats();
     this.broadcastSSE('playtime_status', this.getPlaytimeStatus());

@@ -276,17 +276,20 @@ class DiscordClient {
     const durationMs = Math.floor(hoursPerDay * 3600 * 1000);
     const fingerprint = this.generatePEFingerprint(userId);
     const now = Date.now();
-    const heartbeatId = uuidv4();
-    const signature = uuidv4();
-    let seq = 0;
-
     const events = [];
     const exeName = game.executable || `${game.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'game'}.exe`;
 
     for (let d = days - 1; d >= 0; d--) {
+      // Each daily session has its own independent heartbeat session ID, signature, and internal sequence
+      const heartbeatId = uuidv4();
+      const signature = uuidv4();
       const sid = uuidv4();
+      let seq = 0;
+
       const targetDay = d + startDayOffset;
-      const dayEnd = now - (targetDay * 86400000);
+      // Add realistic jitter (5-45 minutes) to ensure natural time boundaries
+      const jitterMs = ((d * 41 + 17) % 40) * 60000;
+      const dayEnd = now - (targetDay * 86400000) - jitterMs;
       const dayStart = dayEnd - durationMs;
 
       events.push({
