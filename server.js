@@ -500,7 +500,7 @@ app.get('/api/games', (req, res) => {
 });
 
 // --- DISCORD QUESTS (ĐÃ GỠ BỎ HOÀN TOÀN) ---
-app.all('/api/quests*', (req, res) => {
+app.use('/api/quests', (req, res) => {
   res.json({
     success: false,
     message: 'Tính năng Discord Quests đã bị gỡ bỏ vĩnh viễn để bảo vệ tài khoản khỏi bị Discord cảnh báo/phạt.',
