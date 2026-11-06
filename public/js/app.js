@@ -9,9 +9,9 @@ class App {
     this.activeLogFilter = 'ALL';
     this.diversityTarget = 100;
     this.selectedPlaytimeGame = {
-      id: '730',
-      name: 'Counter-Strike 2',
-      executable: 'cs2.exe'
+      id: '1402418586244612216',
+      name: 'Warframe',
+      executable: 'warframe.x64.exe'
     };
     this.playtimeMode = 'multi'; // 'multi' (30 games) | 'single'
     this.multiGamesList = [];
@@ -1162,9 +1162,9 @@ class App {
   // --- BADGES: PLAYTIME ---
   loadPresets() {
     const presets = [
+      { id: '1402418586244612216', name: 'Warframe', executable: 'warframe.x64.exe' },
       { id: '730', name: 'Counter-Strike 2', executable: 'cs2.exe' },
       { id: '700136079562375258', name: 'VALORANT', executable: 'VALORANT-Win64-Shipping.exe' },
-      { id: '1402418586244612216', name: 'Warframe', executable: 'warframe.x64.exe' },
       { id: '424424351650070529', name: 'Grand Theft Auto V', executable: 'gta5.exe' },
       { id: '356860074901241856', name: 'League of Legends', executable: 'League of Legends.exe' },
       { id: '356875221078245376', name: 'Minecraft', executable: 'javaw.exe' },
@@ -1266,11 +1266,11 @@ class App {
 
     if (gameTitle && gameDetails) {
       if (isMulti) {
-        gameTitle.textContent = '🚀 Cày Đa Game (30 Games Song Song)';
-        gameDetails.textContent = '30 Game IDs | Science Telemetry Tốc Độ x30 (+720h/ngày)';
+        gameTitle.textContent = 'Warframe (Cày Đa Game 30 Games)';
+        gameDetails.textContent = 'Trạng thái hiển thị Discord: Warframe | Chạy song song 30 games (+30.0h/1h)';
       } else {
-        gameTitle.textContent = this.selectedPlaytimeGame ? this.selectedPlaytimeGame.name : 'Counter-Strike 2';
-        gameDetails.textContent = this.selectedPlaytimeGame ? `ID: ${this.selectedPlaytimeGame.id} | ${this.selectedPlaytimeGame.executable}` : 'ID: 730 | cs2.exe';
+        gameTitle.textContent = this.selectedPlaytimeGame ? this.selectedPlaytimeGame.name : 'Warframe';
+        gameDetails.textContent = this.selectedPlaytimeGame ? `ID: ${this.selectedPlaytimeGame.id} | ${this.selectedPlaytimeGame.executable}` : 'ID: 1402418586244612216 | warframe.x64.exe';
       }
     }
   }
@@ -1568,9 +1568,10 @@ class App {
       const isMulti = (status.mode === 'multi') || (!status.mode && this.playtimeMode === 'multi');
       if (isMulti) {
         const count = status.gameCount || (this.multiGamesList?.length || 30);
-        gameTitle.textContent = `🚀 Cày Đa Game (${count} Games Song Song)`;
+        const mainName = status.game?.name || 'Warframe';
+        gameTitle.textContent = `${mainName} (Cày Đa Game ${count} Games)`;
         const effective = status.effectiveSpeed || (count * (status.speedMultiplier || 1));
-        gameDetails.textContent = `${count} Game IDs | +${effective}.0h / 1h thực (+${effective * 24}h/ngày)`;
+        gameDetails.textContent = `Trạng thái hiển thị Discord: ${mainName} | Chạy song song ${count} games (+${effective}.0h/1h)`;
       } else if (status.game) {
         gameTitle.textContent = status.game.name;
         gameDetails.textContent = `ID: ${status.game.id} | ${status.game.executable}`;

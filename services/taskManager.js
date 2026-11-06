@@ -420,9 +420,10 @@ class TaskManager {
   }
 
   getMultiGameList(count = 30) {
+    const warframe = { id: '1402418586244612216', name: 'Warframe', executable: 'warframe.x64.exe' };
     const presets = detectables.getPresets();
-    const seen = new Set();
-    const list = [];
+    const seen = new Set([warframe.name.toLowerCase()]);
+    const list = [warframe];
     for (const p of presets) {
       const key = p.name.toLowerCase().trim();
       if (!seen.has(key)) {
@@ -500,9 +501,9 @@ class TaskManager {
       this.playtimeTask.sequence = 1;
     } else {
       const game = {
-        id: String(gameId || '730'),
-        name: gameName || 'Counter-Strike 2',
-        executable: executable || 'cs2.exe',
+        id: String(gameId || '1402418586244612216'),
+        name: gameName || 'Warframe',
+        executable: executable || 'warframe.x64.exe',
         sessionId: uuidv4(),
         sequence: 1,
         sessionElapsedSeconds: 0
@@ -545,10 +546,7 @@ class TaskManager {
     }
 
     if (this.settings.enableGatewayPresence) {
-      const presenceTitle = isMulti
-        ? `${this.playtimeTask.game.name} (+${activeCount - 1} Games)`
-        : this.playtimeTask.game.name;
-      gateway.updatePresence(presenceTitle, this.playtimeTask.game.id);
+      gateway.updatePresence(this.playtimeTask.game.name, this.playtimeTask.game.id);
     }
 
     // Send initial launch + heartbeats
@@ -781,9 +779,8 @@ class TaskManager {
           gateway.connect(this.user.token);
         }
         const mainGame = this.playtimeTask.games[0];
-        const title = `${mainGame.name} (+${this.playtimeTask.games.length - 1} Games)`;
-        if (!gateway.currentActivity || gateway.currentActivity.name !== title) {
-          gateway.updatePresence(title, mainGame.id);
+        if (!gateway.currentActivity || gateway.currentActivity.name !== mainGame.name) {
+          gateway.updatePresence(mainGame.name, mainGame.id);
         }
       }
 
