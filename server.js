@@ -569,11 +569,19 @@ app.post('/api/diversity/turbo-inject', async (req, res) => {
 });
 
 // --- PLAYTIME HOURS BOOSTER ---
+app.get('/api/playtime/multi-games', (req, res) => {
+  const count = Math.min(Math.max(parseInt(req.query.count) || 30, 2), 40);
+  const games = taskManager.getMultiGameList(count);
+  res.json({ success: true, games, count: games.length });
+});
+
 app.post('/api/playtime/start', async (req, res) => {
   try {
     await resolveUserSession(req);
-    const { gameId, gameName, executable, intervalSec, targetHours, speedMultiplier, autoHourlyInject, autoInjectHours } = req.body;
+    const { mode, gameCount, gameId, gameName, executable, intervalSec, targetHours, speedMultiplier, autoHourlyInject, autoInjectHours } = req.body;
     const result = await taskManager.startPlaytime({
+      mode,
+      gameCount,
       gameId,
       gameName,
       executable,
@@ -598,8 +606,10 @@ app.post('/api/playtime/auto-inject-settings', (req, res) => {
 app.post('/api/playtime/turbo-inject', async (req, res) => {
   try {
     await resolveUserSession(req);
-    const { gameId, gameName, executable, hoursToAdd } = req.body;
+    const { mode, gameCount, gameId, gameName, executable, hoursToAdd } = req.body;
     const result = await taskManager.turboInjectPlaytime({
+      mode,
+      gameCount,
       gameId,
       gameName,
       executable,

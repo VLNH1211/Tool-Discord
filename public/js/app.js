@@ -13,6 +13,8 @@ class App {
       name: 'Counter-Strike 2',
       executable: 'cs2.exe'
     };
+    this.playtimeMode = 'multi'; // 'multi' (30 games) | 'single'
+    this.multiGamesList = [];
     this.friendsList = [];
     this.currentFriendFilter = '1'; // 1: Friends, 4: Outgoing, 3: Incoming, 2: Blocked
     this.serversList = [];
@@ -29,6 +31,7 @@ class App {
     this.setupEventListeners();
     this.initSSE();
     this.loadPresets();
+    this.loadMultiGames();
     await this.syncAccountsWithServer();
 
     if (this.token) {
@@ -1184,10 +1187,92 @@ class App {
         btn.className = 'playtime-preset-chip text-xs px-3 py-1.5 rounded-lg border border-[#3f4147] transition-all bg-[#5865f2] text-white font-bold';
 
         this.selectedPlaytimeGame = { id: btn.dataset.id, name: btn.dataset.name, executable: btn.dataset.exe };
-        document.getElementById('playtimeSelectedGameTitle').textContent = this.selectedPlaytimeGame.name;
-        document.getElementById('playtimeSelectedGameDetails').textContent = `ID: ${this.selectedPlaytimeGame.id} | ${this.selectedPlaytimeGame.executable}`;
+        if (this.playtimeMode === 'single') {
+          document.getElementById('playtimeSelectedGameTitle').textContent = this.selectedPlaytimeGame.name;
+          document.getElementById('playtimeSelectedGameDetails').textContent = `ID: ${this.selectedPlaytimeGame.id} | ${this.selectedPlaytimeGame.executable}`;
+        }
       });
     });
+  }
+
+  async loadMultiGames() {
+    try {
+      const res = await fetch('/api/playtime/multi-games?count=30');
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.games)) {
+        this.multiGamesList = data.games;
+        this.renderMultiGamesGrid();
+      }
+    } catch (e) {
+      console.warn('loadMultiGames error:', e);
+    }
+  }
+
+  renderMultiGamesGrid() {
+    const grid = document.getElementById('playtimeMultiGameGrid');
+    if (!grid || !this.multiGamesList || this.multiGamesList.length === 0) return;
+    grid.innerHTML = this.multiGamesList.map((g, i) => `
+      <div class="flex items-center space-x-1.5 p-1.5 rounded-lg bg-[#2b2d31] border border-[#383a40] text-[11px] hover:border-indigo-500/50 transition-all select-none" title="${g.name} (${g.executable})">
+        <span class="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-300 font-mono text-[9px] flex items-center justify-center font-bold flex-shrink-0">${i + 1}</span>
+        <span class="text-gray-200 font-medium truncate">${g.name}</span>
+      </div>
+    `).join('');
+  }
+
+  setPlaytimeMode(mode) {
+    this.playtimeMode = mode === 'single' ? 'single' : 'multi';
+    const isMulti = this.playtimeMode === 'multi';
+
+    const btnMulti = document.getElementById('btnModeMultiGame');
+    const btnSingle = document.getElementById('btnModeSingleGame');
+    const multiView = document.getElementById('playtimeMultiGameView');
+    const singleView = document.getElementById('playtimeSingleGameView');
+    const speedTag = document.getElementById('playtimeModeSpeedTag');
+    const startBtnText = document.getElementById('btnStartPlaytimeText');
+    const gameTitle = document.getElementById('playtimeSelectedGameTitle');
+    const gameDetails = document.getElementById('playtimeSelectedGameDetails');
+
+    if (btnMulti && btnSingle) {
+      if (isMulti) {
+        btnMulti.className = 'px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center space-x-2 bg-[#5865f2] text-white shadow-md cursor-pointer';
+        btnSingle.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 text-[#949ba4] hover:text-white cursor-pointer';
+      } else {
+        btnMulti.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 text-[#949ba4] hover:text-white cursor-pointer';
+        btnSingle.className = 'px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center space-x-1.5 bg-[#5865f2] text-white shadow-md cursor-pointer';
+      }
+    }
+
+    if (multiView && singleView) {
+      if (isMulti) {
+        multiView.classList.remove('hidden');
+        singleView.classList.add('hidden');
+      } else {
+        multiView.classList.add('hidden');
+        singleView.classList.remove('hidden');
+      }
+    }
+
+    if (speedTag) {
+      if (isMulti) {
+        speedTag.innerHTML = `<span>⚡ Tốc độ tích lũy:</span> <strong class="text-amber-300 font-black">+30.0 Giờ / 1h thực</strong> <span class="text-[#949ba4] font-normal">(+720h / ngày)</span>`;
+      } else {
+        speedTag.innerHTML = `<span>⚡ Tốc độ tích lũy:</span> <strong class="text-indigo-300 font-bold">+1.0 Giờ / 1h thực</strong> <span class="text-[#949ba4] font-normal">(+24h / ngày)</span>`;
+      }
+    }
+
+    if (startBtnText) {
+      startBtnText.textContent = isMulti ? 'Bắt đầu AFK Cày 30 Games (x30 Tốc Độ)' : 'Bắt đầu AFK Farm (1 Game)';
+    }
+
+    if (gameTitle && gameDetails) {
+      if (isMulti) {
+        gameTitle.textContent = '🚀 Cày Đa Game (30 Games Song Song)';
+        gameDetails.textContent = '30 Game IDs | Science Telemetry Tốc Độ x30 (+720h/ngày)';
+      } else {
+        gameTitle.textContent = this.selectedPlaytimeGame ? this.selectedPlaytimeGame.name : 'Counter-Strike 2';
+        gameDetails.textContent = this.selectedPlaytimeGame ? `ID: ${this.selectedPlaytimeGame.id} | ${this.selectedPlaytimeGame.executable}` : 'ID: 730 | cs2.exe';
+      }
+    }
   }
 
   async startPlaytime() {
@@ -1198,10 +1283,15 @@ class App {
     const autoHourlyInject = document.getElementById('autoInjectToggle')?.checked ?? true;
     const autoInjectHours = parseInt(document.getElementById('autoInjectHoursSelect')?.value) || 10;
 
+    const mode = this.playtimeMode || 'multi';
+    const isMulti = mode === 'multi';
+
     const res = await fetch('/api/playtime/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        mode,
+        gameCount: 30,
         gameId: this.selectedPlaytimeGame.id,
         gameName: this.selectedPlaytimeGame.name,
         executable: this.selectedPlaytimeGame.executable,
@@ -1216,9 +1306,10 @@ class App {
     if (!data.success) {
       alert(data.message);
     } else {
+      const modeDesc = isMulti ? '🚀 Đa Game (30 Games song song - +30h/1h)' : `"${this.selectedPlaytimeGame.name}"`;
       const turboNote = speedMultiplier > 1 ? ` (⚡ Turbo ${speedMultiplier}x)` : '';
       const autoNote = autoHourlyInject ? ` (⚡ Tự động nạp: +${autoInjectHours}h/1h)` : '';
-      this.showToast(`Bắt đầu cày ${targetHours}h game "${this.selectedPlaytimeGame.name}"${turboNote}${autoNote}!`, 'success');
+      this.showToast(`Bắt đầu cày ${targetHours}h [${modeDesc}]${turboNote}${autoNote}!`, 'success');
     }
   }
 
@@ -1320,6 +1411,8 @@ class App {
         },
         body: JSON.stringify({
           token: this.token,
+          mode: this.playtimeMode || 'multi',
+          gameCount: 30,
           gameId: game.id,
           gameName: game.name,
           executable: game.executable,
@@ -1468,6 +1561,21 @@ class App {
 
     const heartbeatEl = document.getElementById('playtimeHeartbeatCounter');
     if (heartbeatEl) heartbeatEl.textContent = status.totalHeartbeats || 0;
+
+    const gameTitle = document.getElementById('playtimeSelectedGameTitle');
+    const gameDetails = document.getElementById('playtimeSelectedGameDetails');
+    if (gameTitle && gameDetails) {
+      const isMulti = (status.mode === 'multi') || (!status.mode && this.playtimeMode === 'multi');
+      if (isMulti) {
+        const count = status.gameCount || (this.multiGamesList?.length || 30);
+        gameTitle.textContent = `🚀 Cày Đa Game (${count} Games Song Song)`;
+        const effective = status.effectiveSpeed || (count * (status.speedMultiplier || 1));
+        gameDetails.textContent = `${count} Game IDs | +${effective}.0h / 1h thực (+${effective * 24}h/ngày)`;
+      } else if (status.game) {
+        gameTitle.textContent = status.game.name;
+        gameDetails.textContent = `ID: ${status.game.id} | ${status.game.executable}`;
+      }
+    }
 
     const badge = document.getElementById('playtimeStateBadge');
     if (badge) {
@@ -2550,6 +2658,10 @@ class App {
         this.switchAccount(e.target.value);
       }
     });
+
+    // Mode Selectors (Multi-Game 30 Games vs Single Game)
+    document.getElementById('btnModeMultiGame')?.addEventListener('click', () => this.setPlaytimeMode('multi'));
+    document.getElementById('btnModeSingleGame')?.addEventListener('click', () => this.setPlaytimeMode('single'));
 
     // Playtime Controls
     document.getElementById('btnStartPlaytime').addEventListener('click', () => this.startPlaytime());
